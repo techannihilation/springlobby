@@ -35,7 +35,7 @@ if( ${CMAKE_CROSSCOMPILING} )
 	set(Boost_USE_STATIC_RUNTIME    ON)
 endif()
 
-find_package(Boost 1.42.0 COMPONENTS system REQUIRED)
+find_package(Boost 1.42.0 COMPONENTS thread filesystem REQUIRED)
 
 
 add_definitions( -DLOCALE_INSTALL_DIR="${LOCALE_INSTALL_DIR}" )
@@ -88,6 +88,8 @@ message(STATUS "Using WX_C_FLAGS: ${WX_C_FLAGS}")
 execute_process(COMMAND ${wxWidgets_CONFIG_EXECUTABLE} "--libs" "net,qa,richtext,adv,aui,core" "${WXSTATIC}"
 	OUTPUT_VARIABLE WX_LD_FLAGS
 	OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(STRIP "${WX_LD_FLAGS}" WX_LD_FLAGS)
+separate_arguments(WX_LD_FLAGS)
 message(STATUS "Using WX_LD_FLAGS: ${WX_LD_FLAGS}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WX_CXX_FLAGS}")
@@ -514,4 +516,3 @@ enable_testing()
 add_subdirectory(tests)
 
 add_analyze(${springlobbySoundsrc} ${springlobbySrc} ${SLSharedWithSettings})
-

@@ -113,6 +113,7 @@ public:
 
 private:
 	void OnUnitSyncReloaded(wxCommandEvent& /*unused*/);
+	void OnUnitSyncReloadRequest(wxCommandEvent& /*unused*/);
 
 private:
 	wxMenuBar* m_menubar;

@@ -72,6 +72,12 @@ BOOST_AUTO_TEST_CASE(VersionCheck)
 	std::string v5 = "104.0.1-448-g243c5dd";
 	std::string v6 = "104.0";
 	std::string v7 = "";
+	std::string v8 = "2025.06.05";
+	std::string v9 = "2025.6.5";
+	std::string v10 = "spring 2025.06.05.0";
+	std::string v11 = "105.0.0";
+	std::string v12 = "105.1.1-10-gabcdef develop  BAR105.";
+	std::string v13 = "105.1.1-10-gabcdef develop BAR105.";
 
 	BOOST_CHECK(CheckVersion(v6, v6));
 	BOOST_CHECK(!CheckVersion(v6, v4));
@@ -79,6 +85,11 @@ BOOST_AUTO_TEST_CASE(VersionCheck)
 	BOOST_CHECK(!CheckVersion(v6, v2));
 	BOOST_CHECK(!CheckVersion(v5, v4));
 	BOOST_CHECK(!CheckVersion(v2, v7));
+	BOOST_CHECK(CheckVersion(v8, v9));
+	BOOST_CHECK(CheckVersion(v8, v10));
+	BOOST_CHECK(CheckVersion(v3, v11));
+	BOOST_CHECK(!CheckVersion(v2, v6));
+	BOOST_CHECK(CheckVersion(v12, v13));
 
 	BOOST_CHECK(CheckCompareVersionStrings("0.264", "0.264-43-gd87151a2", 1));
 	BOOST_CHECK(CheckCompareVersionStrings("0.264-43-gd87151a2", "0.264", -1));

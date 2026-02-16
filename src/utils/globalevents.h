@@ -37,6 +37,7 @@ public:
 	static const wxEventType OnDownloadProgress;
 	static const wxEventType OnUnitsyncFirstTimeLoad;
 	static const wxEventType OnUnitsyncReloaded;
+	static const wxEventType OnUnitsyncReloadRequest;
 	static const wxEventType OnSpringTerminated;
 	static const wxEventType OnSpringStarted;
 	static const wxEventType UpdateFinished;

@@ -2,6 +2,21 @@ add_subdirectory(headercheck)
 
 find_package(Boost 1.35.0 COMPONENTS unit_test_framework)
 
+add_executable(unitsync_smoke EXCLUDE_FROM_ALL
+	"${CMAKE_CURRENT_SOURCE_DIR}/unitsync_smoke.cpp"
+	"${springlobby_SOURCE_DIR}/src/downloader/lib/src/Logger.cpp"
+)
+target_include_directories(unitsync_smoke
+	PRIVATE ${springlobby_SOURCE_DIR}/src
+	PRIVATE ${springlobby_SOURCE_DIR}/src/downloader/lib/src/lsl
+)
+target_link_libraries(unitsync_smoke
+	lsl-unitsync
+	lsl-utils
+	pr-downloader_static
+	${WX_LD_FLAGS}
+)
+
 if(NOT Boost_FOUND)
         message(STATUS "Note: Unit tests will not be built: Boost::test library was not found")
 else()

@@ -1,7 +1,7 @@
-project(springlobby)
-
 #set minimum cmake version
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
+
+project(springlobby)
 
 set(CMAKE_COLOR_MAKEFILE ON)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -169,4 +169,3 @@ add_custom_target(distcheck + cd ${CMAKE_BINARY_DIR} &&
 			cd ${PACKAGE_NAME}-${PACKAGE_VERSION}/ &&
 			cmake "-DCMAKE_CXX_FLAGS:STRING=-O0" . && ${CMAKE_MAKE_PROGRAM})
 add_dependencies( distcheck dist )
-

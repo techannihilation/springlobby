@@ -29,10 +29,46 @@
 #include "utils/slpaths.h"
 
 SLCONFIG("/Spring/PortableDownload", false, "true to download portable versions of spring, if false cache/settings/etc are shared (bogous!)");
-SLCONFIG("/Spring/RapidMasterUrl", "http://repos.springrts.com/repos.gz", "master url for rapid downloads");
+SLCONFIG("/Spring/RapidMasterUrl", "https://rapid.techa-rts.com/repos.gz", "primary master url for rapid downloads");
+SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://repos.springrts.com/repos.gz", "fallback master url for rapid downloads");
 
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
+
+static std::string GetRapidMasterUrl()
+{
+	return STD_STRING(cfg().ReadString("/Spring/RapidMasterUrl"));
+}
+
+static std::string GetRapidMasterFallbackUrl()
+{
+	return STD_STRING(cfg().ReadString("/Spring/RapidMasterFallbackUrl"));
+}
+
+static bool IsRapidSearchCategory(const DownloadEnum::Category category)
+{
+	return category == DownloadEnum::CAT_GAME || category == DownloadEnum::CAT_COUNT || category == DownloadEnum::CAT_NONE;
+}
+
+static int SearchWithRapidFallback(const DownloadEnum::Category category, const std::string& name, bool& usedFallback)
+{
+	usedFallback = false;
+	int results = DownloadSearch(category, name.c_str());
+	if (results > 0 || !IsRapidSearchCategory(category)) {
+		return results;
+	}
+
+	const std::string primaryMasterUrl = GetRapidMasterUrl();
+	const std::string fallbackMasterUrl = GetRapidMasterFallbackUrl();
+	if (fallbackMasterUrl.empty() || fallbackMasterUrl == primaryMasterUrl) {
+		return results;
+	}
+
+	wxLogInfo("No rapid matches on %s for '%s', retrying with fallback %s", primaryMasterUrl.c_str(), name.c_str(), fallbackMasterUrl.c_str());
+	rapidDownload->setOption("masterurl", fallbackMasterUrl);
+	usedFallback = true;
+	return DownloadSearch(category, name.c_str());
+}
 
 class DownloadItem : public LSL::WorkItem
 {
@@ -66,6 +102,13 @@ public:
 		const bool force = true;
 		DownloadSetConfig(CONFIG_RAPID_FORCEUPDATE, &force);
 		int results = 0;
+		bool usedRapidFallback = false;
+		const std::string rapidMasterUrl = GetRapidMasterUrl();
+		const auto resetRapidMasterUrl = [&]() {
+			if (usedRapidFallback) {
+				rapidDownload->setOption("masterurl", rapidMasterUrl);
+			}
+		};
 
 		switch (m_category) {
 			case DownloadEnum::CAT_SPRINGLOBBY:
@@ -73,10 +116,11 @@ public:
 				results = DownloadAddByUrl(m_category, m_filename.c_str(), m_name.c_str());
 				break;
 			default:
-				results = DownloadSearch(m_category, m_name.c_str());
+				results = SearchWithRapidFallback(m_category, m_name, usedRapidFallback);
 				break;
 		}
 		if (results <= 0) {
+			resetRapidMasterUrl();
 			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
 			wxLogInfo("Nothing found to download");
 			return;
@@ -91,6 +135,7 @@ public:
 		const bool hasdlinfo = DownloadGetInfo(0, info);
 		//In case if something gone wrong
 		if (!hasdlinfo) {
+			resetRapidMasterUrl();
 			wxLogWarning("Download has no downloadinfo: %s", m_name.c_str());
 			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
 			return;
@@ -99,6 +144,7 @@ public:
 		GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
 
 		const bool downloadFailed = DownloadStart();
+		resetRapidMasterUrl();
 
 		if (downloadFailed) {
 			wxLogWarning("Download failed: %s", m_name.c_str());
@@ -144,12 +190,8 @@ private:
 					version = m_name;
 
 				SlPaths::SetUsedSpringIndex(version);
-				//Inform all application components about new engine been available
-				if (!LSL::usync().ReloadUnitSyncLib()) {
-					wxLogWarning("Couldn't load downloaded unitsync %s!", version.c_str());
-					break;
-				}
-				GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloaded);
+				// Reload unitsync on the GUI thread (some engine bundles crash when initialized from the downloader worker thread).
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadRequest);
 				break;
 			}
 			case DownloadEnum::CAT_SPRINGLOBBY: {
@@ -295,7 +337,7 @@ void PrDownloader::UpdateSettings()
 
 	DownloadSetConfig(CONFIG_FILESYSTEM_WRITEPATH, SlPaths::GetDownloadDir().c_str());
 	//FIXME: fileSystem->setEnginePortableDownload(cfg().ReadBool(_T("/Spring/PortableDownload")));
-	// rapidDownload->setOption("masterurl", STD_STRING(cfg().ReadString(_T("/Spring/RapidMasterUrl"))));
+	rapidDownload->setOption("masterurl", GetRapidMasterUrl());
 }
 
 void PrDownloader::RemoveTorrentByName(const std::string& /*name*/)

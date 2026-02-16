@@ -238,6 +238,7 @@ MainWindow::MainWindow()
 	//	Logger::ShowDebugWindow(cfg().ReadBool(_T("/debug")));
 
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloaded, MainWindow::OnUnitSyncReloaded);
+	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloadRequest, MainWindow::OnUnitSyncReloadRequest);
 }
 
 wxBitmap MainWindow::GetTabIcon(const unsigned char* data, size_t size) const
@@ -306,6 +307,17 @@ void MainWindow::OnClose(wxCloseEvent& /*unused*/)
 		m_autojoin_dialog = 0;
 	}
 	Destroy();
+}
+
+void MainWindow::OnUnitSyncReloadRequest(wxCommandEvent& /*unused*/)
+{
+	// Ensure unitsync reload happens on the GUI thread (worker-thread reload has caused crashes
+	// with some engine bundles).
+	if (LSL::usync().ReloadUnitSyncLib()) {
+		GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloaded);
+	} else {
+		wxLogWarning("Couldn't reload unitsync");
+	}
 }
 
 void MainWindow::OnSetFocus(wxFocusEvent&)

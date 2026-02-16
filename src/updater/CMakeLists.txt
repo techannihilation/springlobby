@@ -10,6 +10,8 @@ if(SPRINGLOBBY_UPDATER)
 	execute_process(COMMAND ${wxWidgets_CONFIG_EXECUTABLE} "--libs" "core" "${WXSTATIC}"
 		        OUTPUT_VARIABLE WX_UPDATER_LD_FLAGS
 			OUTPUT_STRIP_TRAILING_WHITESPACE)
+	string(STRIP "${WX_UPDATER_LD_FLAGS}" WX_UPDATER_LD_FLAGS)
+	separate_arguments(WX_UPDATER_LD_FLAGS)
 	set(updaterSrc
 		updaterapp.cpp
 		../utils/platform.cpp
@@ -25,4 +27,3 @@ if(SPRINGLOBBY_UPDATER)
 			PRIVATE ${springlobby_SOURCE_DIR}/src/downloader/lib/src/lsl)
 	install(TARGETS springlobby_updater RUNTIME DESTINATION .)
 endif()
-

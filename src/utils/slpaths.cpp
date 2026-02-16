@@ -14,6 +14,9 @@
 #include <wx/stdpaths.h>
 #include <wx/string.h>
 #include <algorithm>
+#include <cstdio>
+#include <cctype>
+#include <vector>
 
 #ifdef _WIN32
 #include <shlobj.h>
@@ -536,5 +539,150 @@ std::string SlPaths::SantinizeFilename(const std::string& filename)
 
 bool SlPaths::VersionSyncCompatible(const std::string& ver1, const std::string& ver2)
 {
-	return !ver1.empty() && !ver2.empty() && ver1 == ver2;
+	auto normalize = [](std::string version) -> std::string {
+		auto collapseWhitespace = [](const std::string& input) -> std::string {
+			std::string out;
+			out.reserve(input.size());
+
+			bool inWhitespace = true;
+			for (unsigned char ch : input) {
+				if (std::isspace(ch)) {
+					inWhitespace = true;
+					continue;
+				}
+				if (!out.empty() && inWhitespace) {
+					out.push_back(' ');
+				}
+				inWhitespace = false;
+				out.push_back(static_cast<char>(ch));
+			}
+
+			return out;
+		};
+
+		auto startsWithSpringPrefix = [](const std::string& input) -> bool {
+			const std::string prefix = "spring ";
+			if (input.size() < prefix.size()) {
+				return false;
+			}
+			for (size_t i = 0; i < prefix.size(); ++i) {
+				if (std::tolower(static_cast<unsigned char>(input[i])) != prefix[i]) {
+					return false;
+				}
+			}
+			return true;
+		};
+
+		auto isAllDigits = [](const std::string& s) -> bool {
+			if (s.empty()) {
+				return false;
+			}
+			for (unsigned char ch : s) {
+				if (!std::isdigit(ch)) {
+					return false;
+				}
+			}
+			return true;
+		};
+
+		auto splitDot = [](const std::string& s) -> std::vector<std::string> {
+			std::vector<std::string> parts;
+			std::string current;
+			for (char ch : s) {
+				if (ch == '.') {
+					parts.push_back(current);
+					current.clear();
+					continue;
+				}
+				current.push_back(ch);
+			}
+			parts.push_back(current);
+			return parts;
+		};
+
+		auto joinDot = [](const std::vector<std::string>& parts) -> std::string {
+			std::string out;
+			for (size_t i = 0; i < parts.size(); ++i) {
+				if (i != 0) {
+					out.push_back('.');
+				}
+				out += parts[i];
+			}
+			return out;
+		};
+
+		version = collapseWhitespace(version);
+		if (startsWithSpringPrefix(version)) {
+			version.erase(0, std::string("spring ").size());
+		}
+
+		// Normalize date-style versions: YYYY.MM.DD / YYYY.M.D (optional trailing .0)
+		// into YYYY.MM.DD.
+		{
+			const auto parts = splitDot(version);
+			const bool maybeDate = (parts.size() == 3 || parts.size() == 4);
+			if (maybeDate && parts[0].size() == 4 && isAllDigits(parts[0]) && isAllDigits(parts[1]) && isAllDigits(parts[2])) {
+				const int year = std::stoi(parts[0]);
+				const int month = std::stoi(parts[1]);
+				const int day = std::stoi(parts[2]);
+				const bool hasOptionalZeroSuffix = (parts.size() == 4);
+				const bool optionalZeroIsValid = (!hasOptionalZeroSuffix) || parts[3] == "0";
+
+				if (year >= 0 && month >= 1 && month <= 12 && day >= 1 && day <= 31 && optionalZeroIsValid) {
+					auto pad2 = [](int value) -> std::string {
+						std::string s = std::to_string(value);
+						if (s.size() == 1) {
+							return "0" + s;
+						}
+						return s;
+					};
+					version = parts[0] + "." + pad2(month) + "." + pad2(day);
+				}
+			}
+		}
+
+		// Ignore trailing ".0" segments for purely numeric dot-versions with >=2 dots,
+		// but keep at least 2 segments so "104" != "104.0" remains true.
+		{
+			bool onlyDigitsAndDots = !version.empty();
+			size_t dotCount = 0;
+			for (unsigned char ch : version) {
+				if (ch == '.') {
+					++dotCount;
+					continue;
+				}
+				if (!std::isdigit(ch)) {
+					onlyDigitsAndDots = false;
+					break;
+				}
+			}
+
+			if (onlyDigitsAndDots && dotCount >= 2) {
+				auto parts = splitDot(version);
+				bool allPartsDigits = true;
+				for (const auto& part : parts) {
+					if (!isAllDigits(part)) {
+						allPartsDigits = false;
+						break;
+					}
+				}
+				if (allPartsDigits) {
+					while (parts.size() > 2 && parts.back() == "0") {
+						parts.pop_back();
+					}
+					version = joinDot(parts);
+				}
+			}
+		}
+
+		return version;
+	};
+
+	if (ver1.empty() || ver2.empty()) {
+		return false;
+	}
+
+	const std::string n1 = normalize(ver1);
+	const std::string n2 = normalize(ver2);
+	return !n1.empty() && !n2.empty() && n1 == n2;
 }
