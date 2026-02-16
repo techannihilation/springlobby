@@ -621,7 +621,35 @@ void MainWindow::OnTabsChanged(wxAuiNotebookEvent& event)
 
 void MainWindow::OnShowErrorMessage(wxCommandEvent& event)
 {
-	wxMessageBox(event.GetString(), _("Error"), wxOK, this);
+	const wxString message = event.GetString();
+
+	// Rapid/repository downloads can emit many per-file CURL errors.
+	// Show one concise popup and suppress further duplicates in this session.
+	static bool rapidRepoErrorAlreadyShown = false;
+	const bool isRapidRepoCurlError = message.Contains("CURL error(")
+	    && (message.Contains("/versions.gz") || message.Contains("/repos.gz"));
+	if (isRapidRepoCurlError) {
+		if (rapidRepoErrorAlreadyShown) {
+			return;
+		}
+		rapidRepoErrorAlreadyShown = true;
+
+		wxString reason = _("Could not download repository metadata.");
+		if (message.Contains("Timeout was reached")) {
+			reason = _("Repository request timed out.");
+		} else if (message.Contains("SSL connect error")) {
+			reason = _("Repository SSL connection failed.");
+		}
+
+		wxMessageBox(
+		    reason + _("\n"
+		      "Further duplicate download errors are hidden for this session.\n"
+		      "Check system date/time, CA certificates, and HTTPS/proxy settings."),
+		    _("Download Error"), wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	wxMessageBox(message, _("Error"), wxOK | wxICON_ERROR, this);
 }
 
 void MainWindow::OnShowSettingsPP(wxCommandEvent&)

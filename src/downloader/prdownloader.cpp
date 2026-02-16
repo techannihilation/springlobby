@@ -31,6 +31,7 @@
 SLCONFIG("/Spring/PortableDownload", false, "true to download portable versions of spring, if false cache/settings/etc are shared (bogous!)");
 SLCONFIG("/Spring/RapidMasterUrl", "https://rapid.techa-rts.com/repos.gz", "primary master url for rapid downloads");
 SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://repos.springrts.com/repos.gz", "fallback master url for rapid downloads");
+SLCONFIG("/Spring/MapDownloadBaseUrl", "http://www.hakora.xyz/files/springrts/maps/", "primary base URL for map downloads (.sd7/.sdz)");
 
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
@@ -43,6 +44,11 @@ static std::string GetRapidMasterUrl()
 static std::string GetRapidMasterFallbackUrl()
 {
 	return STD_STRING(cfg().ReadString("/Spring/RapidMasterFallbackUrl"));
+}
+
+static std::string GetMapDownloadBaseUrl()
+{
+	return STD_STRING(cfg().ReadString("/Spring/MapDownloadBaseUrl"));
 }
 
 static bool IsRapidSearchCategory(const DownloadEnum::Category category)
@@ -338,6 +344,7 @@ void PrDownloader::UpdateSettings()
 	DownloadSetConfig(CONFIG_FILESYSTEM_WRITEPATH, SlPaths::GetDownloadDir().c_str());
 	//FIXME: fileSystem->setEnginePortableDownload(cfg().ReadBool(_T("/Spring/PortableDownload")));
 	rapidDownload->setOption("masterurl", GetRapidMasterUrl());
+	httpDownload->setOption("map_base_url", GetMapDownloadBaseUrl());
 }
 
 void PrDownloader::RemoveTorrentByName(const std::string& /*name*/)

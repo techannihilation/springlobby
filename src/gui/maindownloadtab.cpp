@@ -102,7 +102,8 @@ void MainDownloadTab::OnDownloadDialog(wxCommandEvent& /*unused*/)
 
 void MainDownloadTab::OnDownloadFailed(wxCommandEvent& /*event*/)
 {
-	customMessageBox(SL_MAIN_ICON, _("Failed to download selected item."), _("Failed to download"), wxOK);
+	// Avoid another modal popup here; detailed/aggregated error reporting is handled centrally.
+	wxLogWarning(_("Failed to download selected item."));
 }
 
 void MainDownloadTab::OnUnitsyncReloaded(wxCommandEvent& /*event*/)
