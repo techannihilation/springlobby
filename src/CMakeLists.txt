@@ -342,6 +342,7 @@ set(springlobbySrc
 	gui/playback/playbackdatamodel.cpp
 
 	downloader/prdownloader.cpp
+	downloader/sourcesconfig.cpp
 	gui/downloaddataviewctrl.cpp
 	gui/downloaddataviewmodel.cpp
 
