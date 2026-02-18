@@ -108,6 +108,7 @@ EVT_AUINOTEBOOK_PAGE_CHANGED(MAIN_TABS, MainWindow::OnTabsChanged)
 EVT_CLOSE(MainWindow::OnClose)
 EVT_END_SESSION(MainWindow::OnClose)
 EVT_COMMAND(mySHOW_ERROR_MESSAGE, wxEVT_SHOW, MainWindow::OnShowErrorMessage)
+EVT_COMMAND(mySHOW_INFO_MESSAGE, wxEVT_SHOW, MainWindow::OnShowInfoMessage)
 END_EVENT_TABLE()
 
 MainWindow::MainWindow()
@@ -623,6 +624,29 @@ void MainWindow::OnShowErrorMessage(wxCommandEvent& event)
 {
 	const wxString message = event.GetString();
 
+	const bool isCurlError = message.Contains("CURL error(") || message.Contains("Error in curl ");
+	const bool isCurlNetworkError = isCurlError &&
+	    (message.Contains("Timeout was reached") ||
+	     message.Contains("SSL connect error") ||
+	     message.Contains("Connection reset by peer") ||
+	     message.Contains("Couldn't resolve host") ||
+	     message.Contains("Could not resolve host") ||
+	     message.Contains("Failed to connect"));
+	if (isCurlNetworkError) {
+		static bool curlErrorAlreadyShown = false;
+		if (curlErrorAlreadyShown) {
+			return;
+		}
+		curlErrorAlreadyShown = true;
+
+		wxMessageBox(
+		    _("Could not download from one source due to a network/SSL issue.\n"
+		      "SpringLobby will retry fallback sources when available.\n"
+		      "Further duplicate CURL errors are hidden for this session."),
+		    _("Download Error"), wxOK | wxICON_ERROR, this);
+		return;
+	}
+
 	// Rapid/repository downloads can emit many per-file CURL errors.
 	// Show one concise popup and suppress further duplicates in this session.
 	static bool rapidRepoErrorAlreadyShown = false;
@@ -650,6 +674,12 @@ void MainWindow::OnShowErrorMessage(wxCommandEvent& event)
 	}
 
 	wxMessageBox(message, _("Error"), wxOK | wxICON_ERROR, this);
+}
+
+void MainWindow::OnShowInfoMessage(wxCommandEvent& event)
+{
+	const wxString message = event.GetString();
+	wxMessageBox(message, _("Info"), wxOK | wxICON_INFORMATION, this);
 }
 
 void MainWindow::OnShowSettingsPP(wxCommandEvent&)

@@ -91,6 +91,7 @@ public:
 	void OnMessage(wxCommandEvent& event);
 	void AddMessageEvent(const wxString& message);
 	void OnShowErrorMessage(wxCommandEvent& event);
+	void OnShowInfoMessage(wxCommandEvent& event);
 
 	void OnTabsChanged(wxAuiNotebookEvent& event);
 	MainChatTab& GetChatTab();
@@ -199,6 +200,7 @@ public:
 	const wxArrayString& GetTabNames();
 
 	static const unsigned int mySHOW_ERROR_MESSAGE = wxID_HIGHEST + 1;
+	static const unsigned int mySHOW_INFO_MESSAGE = wxID_HIGHEST + 2;
 
 private:
 	DECLARE_EVENT_TABLE()
