@@ -17,10 +17,8 @@ struct DownloaderSourcesConfig
 	DownloaderSourcesLoadState loadState = DownloaderSourcesLoadState::Missing;
 	std::vector<std::string> rapidMasterUrls;
 	std::vector<std::string> mapBaseUrls;
-	bool rapidGitEnabled = true;
-	std::string rapidGitManifestUrl;
-	long rapidGitManifestTtlSeconds = 300;
-	long rapidGitApiTimeoutSeconds = 20;
+	long rapidRepoTimeoutSeconds = 0;
+	long mapDownloadTimeoutSeconds = 0;
 	std::string error;
 	std::string path;
 };

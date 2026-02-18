@@ -74,8 +74,8 @@ static bool ParseUrlArray(const Json::Value& node, std::vector<std::string>& out
 	return true;
 }
 
-static bool ParsePositiveLong(const Json::Value& node, const char* key,
-			      long& out, std::string& error)
+static bool ParseNonNegativeLong(const Json::Value& node, const char* key,
+				 long& out, std::string& error)
 {
 	if (!node.isMember(key)) {
 		return true;
@@ -86,8 +86,8 @@ static bool ParsePositiveLong(const Json::Value& node, const char* key,
 	}
 
 	const long value = static_cast<long>(node[key].asInt64());
-	if (value <= 0) {
-		error = std::string(key) + " must be > 0";
+	if (value < 0) {
+		error = std::string(key) + " must be >= 0";
 		return false;
 	}
 	out = value;
@@ -191,33 +191,16 @@ DownloaderSourcesConfig LoadDownloaderSourcesConfig(const std::string& lobbyWrit
 		config.error = "maps.base_urls: " + parseError;
 		return config;
 	}
-
-	if (rapid.isMember("git_enabled")) {
-		if (!rapid["git_enabled"].isBool()) {
-			config.loadState = DownloaderSourcesLoadState::InvalidFile;
-			config.error = "rapid.git_enabled must be a bool";
-			return config;
-		}
-		config.rapidGitEnabled = rapid["git_enabled"].asBool();
-	}
-	if (rapid.isMember("git_manifest_url")) {
-		if (!rapid["git_manifest_url"].isString()) {
-			config.loadState = DownloaderSourcesLoadState::InvalidFile;
-			config.error = "rapid.git_manifest_url must be a string";
-			return config;
-		}
-		config.rapidGitManifestUrl = Trim(rapid["git_manifest_url"].asString());
-	}
-	if (!ParsePositiveLong(rapid, "git_manifest_ttl_seconds",
-			       config.rapidGitManifestTtlSeconds, parseError)) {
+	if (!ParseNonNegativeLong(rapid, "repo_timeout_seconds",
+				  config.rapidRepoTimeoutSeconds, parseError)) {
 		config.loadState = DownloaderSourcesLoadState::InvalidFile;
 		config.error = "rapid." + parseError;
 		return config;
 	}
-	if (!ParsePositiveLong(rapid, "git_api_timeout_seconds",
-			       config.rapidGitApiTimeoutSeconds, parseError)) {
+	if (!ParseNonNegativeLong(maps, "download_timeout_seconds",
+				  config.mapDownloadTimeoutSeconds, parseError)) {
 		config.loadState = DownloaderSourcesLoadState::InvalidFile;
-		config.error = "rapid." + parseError;
+		config.error = "maps." + parseError;
 		return config;
 	}
 

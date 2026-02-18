@@ -17,6 +17,7 @@
 #include <lslunitsync/unitsync.h>
 #include <lslutils/thread.h>
 #include <sys/time.h>
+#include <wx/app.h>
 #include <wx/log.h>
 #include <algorithm>
 #include <cctype>
@@ -28,6 +29,8 @@
 
 #include "log.h"
 #include "settings.h"
+#include "gui/mainwindow.h"
+#include "gui/ui.h"
 #include "utils/conversion.h"
 #include "utils/globalevents.h"
 #include "utils/slconfig.h"
@@ -37,10 +40,8 @@ SLCONFIG("/Spring/PortableDownload", false, "true to download portable versions 
 SLCONFIG("/Spring/RapidMasterUrl", "https://rapid.techa-rts.com/repos.gz", "primary master url for rapid downloads");
 SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://repos.springrts.com/repos.gz", "fallback master url for rapid downloads");
 SLCONFIG("/Spring/MapDownloadBaseUrl", "http://www.hakora.xyz/files/springrts/maps/", "primary base URL for map downloads (.sd7/.sdz)");
-SLCONFIG("/Spring/RapidGitEnabled", true, "enable git-first rapid tag resolution before repos.gz");
-SLCONFIG("/Spring/RapidGitManifestUrl", "https://rapid.techa-rts.com/git-manifest.json", "manifest URL for rapid git tag mapping");
-SLCONFIG("/Spring/RapidGitManifestTtlSeconds", 300l, "cache ttl for rapid git manifest in seconds");
-SLCONFIG("/Spring/RapidGitApiTimeoutSeconds", 20l, "timeout for rapid git API calls in seconds");
+SLCONFIG("/Spring/RapidRepoTimeoutSeconds", 0l, "timeout in seconds for rapid repo index/package downloads (0 disables timeout override)");
+SLCONFIG("/Spring/MapDownloadTimeoutSeconds", 0l, "timeout in seconds for map index/file downloads (0 disables timeout override)");
 
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
@@ -60,34 +61,22 @@ static std::string GetMapDownloadBaseUrl()
 	return STD_STRING(cfg().ReadString("/Spring/MapDownloadBaseUrl"));
 }
 
-static bool GetRapidGitEnabled()
+static long GetRapidRepoTimeoutSeconds()
 {
-	return cfg().ReadBool("/Spring/RapidGitEnabled");
+	return cfg().ReadLong("/Spring/RapidRepoTimeoutSeconds");
 }
 
-static std::string GetRapidGitManifestUrl()
+static long GetMapDownloadTimeoutSeconds()
 {
-	return STD_STRING(cfg().ReadString("/Spring/RapidGitManifestUrl"));
-}
-
-static long GetRapidGitManifestTtlSeconds()
-{
-	return cfg().ReadLong("/Spring/RapidGitManifestTtlSeconds");
-}
-
-static long GetRapidGitApiTimeoutSeconds()
-{
-	return cfg().ReadLong("/Spring/RapidGitApiTimeoutSeconds");
+	return cfg().ReadLong("/Spring/MapDownloadTimeoutSeconds");
 }
 
 struct EffectiveSourcesConfig
 {
 	std::vector<std::string> rapidMasterUrls;
 	std::vector<std::string> mapBaseUrls;
-	bool rapidGitEnabled = true;
-	std::string rapidGitManifestUrl;
-	long rapidGitManifestTtlSeconds = 300;
-	long rapidGitApiTimeoutSeconds = 20;
+	long rapidRepoTimeoutSeconds = 0;
+	long mapDownloadTimeoutSeconds = 0;
 	bool loadedFromSourcesFile = false;
 	bool usingSafeDefaultsBecauseFileInvalid = false;
 	std::string sourcesFilePath;
@@ -97,7 +86,6 @@ struct EffectiveSourcesConfig
 static constexpr const char* kDefaultRapidMasterPrimary = "https://rapid.techa-rts.com/repos.gz";
 static constexpr const char* kDefaultRapidMasterSecondary = "https://repos.springrts.com/repos.gz";
 static constexpr const char* kDefaultMapBase = "http://www.hakora.xyz/files/springrts/maps/";
-static constexpr const char* kDefaultRapidGitManifestUrl = "https://rapid.techa-rts.com/git-manifest.json";
 
 static std::string Trim(std::string value)
 {
@@ -149,10 +137,8 @@ static EffectiveSourcesConfig MakeSafeDefaultsSourcesConfig()
 	EffectiveSourcesConfig config;
 	config.rapidMasterUrls = {kDefaultRapidMasterPrimary, kDefaultRapidMasterSecondary};
 	config.mapBaseUrls = {kDefaultMapBase};
-	config.rapidGitEnabled = true;
-	config.rapidGitManifestUrl = kDefaultRapidGitManifestUrl;
-	config.rapidGitManifestTtlSeconds = 300;
-	config.rapidGitApiTimeoutSeconds = 20;
+	config.rapidRepoTimeoutSeconds = 0;
+	config.mapDownloadTimeoutSeconds = 0;
 	return config;
 }
 
@@ -167,12 +153,8 @@ static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
 			config.loadedFromSourcesFile = true;
 			config.rapidMasterUrls = fileConfig.rapidMasterUrls;
 			config.mapBaseUrls = fileConfig.mapBaseUrls;
-			config.rapidGitEnabled = fileConfig.rapidGitEnabled;
-			config.rapidGitManifestUrl = fileConfig.rapidGitManifestUrl;
-			config.rapidGitManifestTtlSeconds =
-			    fileConfig.rapidGitManifestTtlSeconds;
-			config.rapidGitApiTimeoutSeconds =
-			    fileConfig.rapidGitApiTimeoutSeconds;
+			config.rapidRepoTimeoutSeconds = fileConfig.rapidRepoTimeoutSeconds;
+			config.mapDownloadTimeoutSeconds = fileConfig.mapDownloadTimeoutSeconds;
 			config.sourcesFilePath = fileConfig.path;
 			return config;
 		}
@@ -192,19 +174,14 @@ static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
 	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterUrl());
 	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterFallbackUrl());
 	AppendUniqueUrl(legacyConfig.mapBaseUrls, NormalizeMapBaseUrl(GetMapDownloadBaseUrl()));
-	legacyConfig.rapidGitEnabled = GetRapidGitEnabled();
-	legacyConfig.rapidGitManifestUrl = GetRapidGitManifestUrl();
-	legacyConfig.rapidGitManifestTtlSeconds = GetRapidGitManifestTtlSeconds();
-	legacyConfig.rapidGitApiTimeoutSeconds = GetRapidGitApiTimeoutSeconds();
+	legacyConfig.rapidRepoTimeoutSeconds = GetRapidRepoTimeoutSeconds();
+	legacyConfig.mapDownloadTimeoutSeconds = GetMapDownloadTimeoutSeconds();
 
 	if (legacyConfig.rapidMasterUrls.empty()) {
 		legacyConfig.rapidMasterUrls.push_back(kDefaultRapidMasterPrimary);
 	}
 	if (legacyConfig.mapBaseUrls.empty()) {
 		legacyConfig.mapBaseUrls.push_back(kDefaultMapBase);
-	}
-	if (legacyConfig.rapidGitManifestUrl.empty()) {
-		legacyConfig.rapidGitManifestUrl = kDefaultRapidGitManifestUrl;
 	}
 
 	return legacyConfig;
@@ -234,17 +211,56 @@ static void MaybeLogSourcesConfigWarning(const EffectiveSourcesConfig& config)
 		     config.sourcesFilePath.c_str(), config.sourcesFileError.c_str());
 }
 
+static void MaybeShowSourcesConfigInfoPopup(const EffectiveSourcesConfig& config)
+{
+	std::string message;
+	if (config.loadedFromSourcesFile) {
+		message = "Loaded downloader sources from: " + config.sourcesFilePath;
+	} else if (config.usingSafeDefaultsBecauseFileInvalid) {
+		message = "Could not load downloader sources file:\n" + config.sourcesFilePath +
+			  "\n\nReason: " + config.sourcesFileError +
+			  "\n\nUsing built-in defaults for this session.";
+	} else {
+		message = "Downloader sources file not found:\n" + SlPaths::GetLobbyWriteDir() +
+			  "sources.json\n\nUsing legacy /Spring/* settings.";
+	}
+
+	static std::mutex popupMutex;
+	static std::string shownSignature;
+	{
+		std::lock_guard<std::mutex> lock(popupMutex);
+		if (shownSignature == message) {
+			return;
+		}
+		shownSignature = message;
+	}
+
+	wxApp* app = wxTheApp;
+	if (app == nullptr) {
+		return;
+	}
+
+	const wxString wxMessage = TowxString(message);
+	app->CallAfter([wxMessage]() {
+		if (!ui().IsMainWindowCreated()) {
+			return;
+		}
+		wxCommandEvent* event =
+		    new wxCommandEvent(wxEVT_SHOW, MainWindow::mySHOW_INFO_MESSAGE);
+		event->SetString(wxMessage);
+		ui().mw().GetEventHandler()->QueueEvent(event);
+	});
+}
+
 static void ApplyEffectiveSourcesConfig(const EffectiveSourcesConfig& config)
 {
 	if (!config.rapidMasterUrls.empty()) {
 		rapidDownload->setOption("masterurl", config.rapidMasterUrls.front());
 	}
-	rapidDownload->setOption("git_enabled", config.rapidGitEnabled ? "1" : "0");
-	rapidDownload->setOption("git_manifest_url", config.rapidGitManifestUrl);
-	rapidDownload->setOption("git_manifest_ttl",
-				 std::to_string(config.rapidGitManifestTtlSeconds));
-	rapidDownload->setOption("git_api_timeout",
-				 std::to_string(config.rapidGitApiTimeoutSeconds));
+	rapidDownload->setOption("repo_timeout_seconds",
+				 std::to_string(config.rapidRepoTimeoutSeconds));
+	httpDownload->setOption("map_download_timeout_seconds",
+				std::to_string(config.mapDownloadTimeoutSeconds));
 
 	if (config.mapBaseUrls.empty()) {
 		httpDownload->setOption("map_base_url", "");
@@ -256,37 +272,12 @@ static void ApplyEffectiveSourcesConfig(const EffectiveSourcesConfig& config)
 	httpDownload->setOption("map_base_urls", JoinWithNewlines(config.mapBaseUrls));
 }
 
-static bool IsRapidSearchCategory(const DownloadEnum::Category category)
+static int SearchOnRapidSource(const DownloadEnum::Category category,
+			       const std::string& name,
+			       const std::string& rapidMasterUrl)
 {
-	return category == DownloadEnum::CAT_GAME || category == DownloadEnum::CAT_COUNT || category == DownloadEnum::CAT_NONE;
-}
-
-static int SearchWithRapidFallback(const DownloadEnum::Category category,
-				   const std::string& name,
-				   const std::vector<std::string>& rapidMasterUrls)
-{
-	if (!IsRapidSearchCategory(category)) {
-		return DownloadSearch(category, name.c_str());
-	}
-	if (rapidMasterUrls.empty()) {
-		return DownloadSearch(category, name.c_str());
-	}
-
-	for (size_t i = 0; i < rapidMasterUrls.size(); ++i) {
-		const std::string& currentUrl = rapidMasterUrls[i];
-		rapidDownload->setOption("masterurl", currentUrl);
-		const int results = DownloadSearch(category, name.c_str());
-		if (results > 0) {
-			return results;
-		}
-		if (i + 1 < rapidMasterUrls.size()) {
-			wxLogInfo("No rapid matches on %s for '%s', retrying with %s",
-				  currentUrl.c_str(), name.c_str(),
-				  rapidMasterUrls[i + 1].c_str());
-		}
-	}
-
-	return 0;
+	rapidDownload->setOption("masterurl", rapidMasterUrl);
+	return DownloadSearch(category, name.c_str());
 }
 
 class DownloadItem : public LSL::WorkItem
@@ -324,49 +315,92 @@ public:
 		MaybeLogSourcesConfigWarning(sourceConfig);
 		ApplyEffectiveSourcesConfig(sourceConfig);
 
-		int results = 0;
+		if (m_category == DownloadEnum::CAT_SPRINGLOBBY ||
+		    m_category == DownloadEnum::CAT_HTTP) {
+			const int results = DownloadAddByUrl(m_category, m_filename.c_str(), m_name.c_str());
+			if (results <= 0) {
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+				wxLogInfo("Nothing found to download");
+				return;
+			}
 
-		switch (m_category) {
-			case DownloadEnum::CAT_SPRINGLOBBY:
-			case DownloadEnum::CAT_HTTP:
-				results = DownloadAddByUrl(m_category, m_filename.c_str(), m_name.c_str());
-				break;
-			default:
-				results = SearchWithRapidFallback(m_category, m_name, sourceConfig.rapidMasterUrls);
-				break;
-		}
-		if (results <= 0) {
-			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
-			wxLogInfo("Nothing found to download");
+			downloadInfo info;
+			const bool hasdlinfo = DownloadGetInfo(0, info);
+			if (!hasdlinfo) {
+				wxLogWarning("Download has no downloadinfo: %s", m_name.c_str());
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+				return;
+			}
+
+			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
+			const bool downloadFailed = DownloadStart();
+			if (downloadFailed) {
+				wxLogWarning("Download failed: %s", m_name.c_str());
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+			} else {
+				wxLogInfo("Download finished: %s", m_name.c_str());
+				DownloadFinished(m_category, info);
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
+			}
 			return;
 		}
 
-		for (int i = 0; i < results; i++) {
-			DownloadAdd(i);
-			break; //only add one result
+		// For rapid categories, retry full search+download on each configured source.
+		// This covers failures during both metadata lookup and the actual download start.
+		std::vector<std::string> rapidUrls = sourceConfig.rapidMasterUrls;
+		if (rapidUrls.empty()) {
+			rapidUrls.push_back(GetRapidMasterUrl());
+			const std::string fallback = GetRapidMasterFallbackUrl();
+			if (!fallback.empty() && fallback != rapidUrls.front()) {
+				rapidUrls.push_back(fallback);
+			}
 		}
 
-		downloadInfo info;
-		const bool hasdlinfo = DownloadGetInfo(0, info);
-		//In case if something gone wrong
-		if (!hasdlinfo) {
-			wxLogWarning("Download has no downloadinfo: %s", m_name.c_str());
-			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
-			return;
+		bool started = false;
+		for (size_t idx = 0; idx < rapidUrls.size(); ++idx) {
+			const std::string& rapidUrl = rapidUrls[idx];
+			const int results = SearchOnRapidSource(m_category, m_name, rapidUrl);
+			if (results <= 0) {
+				if (idx + 1 < rapidUrls.size()) {
+					wxLogInfo("No rapid matches on %s for '%s', retrying with %s",
+						  rapidUrl.c_str(), m_name.c_str(),
+						  rapidUrls[idx + 1].c_str());
+				}
+				continue;
+			}
+
+			DownloadAdd(0); // add first result only
+			downloadInfo info;
+			if (!DownloadGetInfo(0, info)) {
+				wxLogWarning("Download has no downloadinfo on %s: %s",
+					     rapidUrl.c_str(), m_name.c_str());
+				continue;
+			}
+
+			if (!started) {
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
+				started = true;
+			}
+
+			if (!DownloadStart()) {
+				wxLogInfo("Download finished: %s (source %s)", m_name.c_str(),
+					  rapidUrl.c_str());
+				DownloadFinished(m_category, info);
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
+				return;
+			}
+
+			if (idx + 1 < rapidUrls.size()) {
+				wxLogWarning("Download failed on %s for '%s', retrying with %s",
+					     rapidUrl.c_str(), m_name.c_str(),
+					     rapidUrls[idx + 1].c_str());
+			} else {
+				wxLogWarning("Download failed on %s for '%s'",
+					     rapidUrl.c_str(), m_name.c_str());
+			}
 		}
 
-		GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
-
-		const bool downloadFailed = DownloadStart();
-
-		if (downloadFailed) {
-			wxLogWarning("Download failed: %s", m_name.c_str());
-			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
-		} else {
-			wxLogInfo("Download finished: %s", m_name.c_str());
-			DownloadFinished(m_category, info);
-			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
-		}
+		GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
 	}
 
 	DownloadEnum::Category getCategory() const
@@ -552,6 +586,7 @@ void PrDownloader::UpdateSettings()
 	//FIXME: fileSystem->setEnginePortableDownload(cfg().ReadBool(_T("/Spring/PortableDownload")));
 	const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
 	MaybeLogSourcesConfigWarning(sourceConfig);
+	MaybeShowSourcesConfigInfoPopup(sourceConfig);
 	ApplyEffectiveSourcesConfig(sourceConfig);
 }
 
