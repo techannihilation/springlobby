@@ -51,6 +51,43 @@ SLCONFIG("/Spring/EngineDownloadTimeoutSeconds", 0l, "timeout in seconds for eng
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
 
+static PrDownloader::DownloadProgress* EnsureProgressLocked()
+{
+	if (m_progress == nullptr) {
+		m_progress = new PrDownloader::DownloadProgress();
+	}
+	return m_progress;
+}
+
+static void StartDownloadProgressTracking(const std::string& name)
+{
+	std::lock_guard<std::mutex> lock(dlProgressMutex);
+	PrDownloader::DownloadProgress* progress = EnsureProgressLocked();
+	progress->name = name;
+	progress->downloaded = 0;
+	progress->filesize = 1;
+	progress->running = true;
+	progress->failed = false;
+}
+
+static void FinishDownloadProgressTracking(const std::string& name, bool success)
+{
+	std::lock_guard<std::mutex> lock(dlProgressMutex);
+	PrDownloader::DownloadProgress* progress = EnsureProgressLocked();
+	progress->name = name;
+	if (progress->filesize <= 0) {
+		progress->filesize = 1;
+	}
+	if (progress->downloaded < 0) {
+		progress->downloaded = 0;
+	}
+	if (success && progress->downloaded < progress->filesize) {
+		progress->downloaded = progress->filesize;
+	}
+	progress->running = false;
+	progress->failed = !success;
+}
+
 static std::string GetRapidMasterUrl()
 {
 	return STD_STRING(cfg().ReadString("/Spring/RapidMasterUrl"));
@@ -476,106 +513,123 @@ public:
 		slLogDebugFunc("");
 		wxLogInfo("Starting download of filename: %s, name: %s, category: %s", m_filename.c_str(), m_name.c_str(), DownloadEnum::getCat(m_category).c_str());
 
-		{
-			std::lock_guard<std::mutex> lock(dlProgressMutex);
-
-			if (m_progress == nullptr)
-				m_progress = new PrDownloader::DownloadProgress();
-			m_progress->name = m_name;
-		}
-
-		const bool force = true;
-		DownloadSetConfig(CONFIG_RAPID_FORCEUPDATE, &force);
-		const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
-		MaybeLogSourcesConfigWarning(sourceConfig);
-		ApplyEffectiveSourcesConfig(sourceConfig);
-
-		if (m_category == DownloadEnum::CAT_SPRINGLOBBY ||
-		    m_category == DownloadEnum::CAT_HTTP) {
-			const int results = DownloadAddByUrl(m_category, m_filename.c_str(), m_name.c_str());
-			if (results <= 0) {
-				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
-				wxLogInfo("Nothing found to download");
+		StartDownloadProgressTracking(m_name);
+		bool progressFinalized = false;
+		bool downloadStartedEventSent = false;
+		auto finalizeProgress = [&](bool success) {
+			if (progressFinalized) {
 				return;
 			}
-
-			downloadInfo info;
-			const bool hasdlinfo = DownloadGetInfo(0, info);
-			if (!hasdlinfo) {
-				wxLogWarning("Download has no downloadinfo: %s", m_name.c_str());
-				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
-				return;
+			FinishDownloadProgressTracking(m_name, success);
+			if (downloadStartedEventSent) {
+				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadProgress);
 			}
+			progressFinalized = true;
+		};
 
-			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
-			const bool downloadFailed = DownloadStart();
-			if (downloadFailed) {
-				wxLogWarning("Download failed: %s", m_name.c_str());
-				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
-			} else {
-				wxLogInfo("Download finished: %s", m_name.c_str());
-				DownloadFinished(m_category, info);
-				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
-			}
-			return;
-		}
+		try {
+			const bool force = true;
+			DownloadSetConfig(CONFIG_RAPID_FORCEUPDATE, &force);
+			const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
+			MaybeLogSourcesConfigWarning(sourceConfig);
+			ApplyEffectiveSourcesConfig(sourceConfig);
 
-		// For rapid categories, retry full search+download on each configured source.
-		// This covers failures during both metadata lookup and the actual download start.
-		std::vector<std::string> rapidUrls = sourceConfig.rapidMasterUrls;
-		if (rapidUrls.empty()) {
-			rapidUrls.push_back(GetRapidMasterUrl());
-			const std::string fallback = GetRapidMasterFallbackUrl();
-			if (!fallback.empty() && fallback != rapidUrls.front()) {
-				rapidUrls.push_back(fallback);
-			}
-		}
-
-		bool started = false;
-		for (size_t idx = 0; idx < rapidUrls.size(); ++idx) {
-			const std::string& rapidUrl = rapidUrls[idx];
-			const int results = SearchOnRapidSource(m_category, m_name, rapidUrl);
-			if (results <= 0) {
-				if (idx + 1 < rapidUrls.size()) {
-					wxLogInfo("No rapid matches on %s for '%s', retrying with %s",
-						  rapidUrl.c_str(), m_name.c_str(),
-						  rapidUrls[idx + 1].c_str());
+			if (m_category == DownloadEnum::CAT_SPRINGLOBBY ||
+			    m_category == DownloadEnum::CAT_HTTP) {
+				const int results = DownloadAddByUrl(m_category, m_filename.c_str(), m_name.c_str());
+				if (results <= 0) {
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+					wxLogInfo("Nothing found to download");
+					finalizeProgress(false);
+					return;
 				}
-				continue;
-			}
 
-			DownloadAdd(0); // add first result only
-			downloadInfo info;
-			if (!DownloadGetInfo(0, info)) {
-				wxLogWarning("Download has no downloadinfo on %s: %s",
-					     rapidUrl.c_str(), m_name.c_str());
-				continue;
-			}
+				downloadInfo info;
+				const bool hasdlinfo = DownloadGetInfo(0, info);
+				if (!hasdlinfo) {
+					wxLogWarning("Download has no downloadinfo: %s", m_name.c_str());
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+					finalizeProgress(false);
+					return;
+				}
 
-			if (!started) {
+				downloadStartedEventSent = true;
 				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
-				started = true;
-			}
-
-			if (!DownloadStart()) {
-				wxLogInfo("Download finished: %s (source %s)", m_name.c_str(),
-					  rapidUrl.c_str());
-				DownloadFinished(m_category, info);
-				GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
+				const bool downloadFailed = DownloadStart();
+				if (downloadFailed) {
+					wxLogWarning("Download failed: %s", m_name.c_str());
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+					finalizeProgress(false);
+				} else {
+					wxLogInfo("Download finished: %s", m_name.c_str());
+					DownloadFinished(m_category, info);
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
+					finalizeProgress(true);
+				}
 				return;
 			}
 
-			if (idx + 1 < rapidUrls.size()) {
-				wxLogWarning("Download failed on %s for '%s', retrying with %s",
-					     rapidUrl.c_str(), m_name.c_str(),
-					     rapidUrls[idx + 1].c_str());
-			} else {
-				wxLogWarning("Download failed on %s for '%s'",
-					     rapidUrl.c_str(), m_name.c_str());
+			// For rapid categories, retry full search+download on each configured source.
+			// This covers failures during both metadata lookup and the actual download start.
+			std::vector<std::string> rapidUrls = sourceConfig.rapidMasterUrls;
+			if (rapidUrls.empty()) {
+				rapidUrls.push_back(GetRapidMasterUrl());
+				const std::string fallback = GetRapidMasterFallbackUrl();
+				if (!fallback.empty() && fallback != rapidUrls.front()) {
+					rapidUrls.push_back(fallback);
+				}
 			}
-		}
 
-		GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+			for (size_t idx = 0; idx < rapidUrls.size(); ++idx) {
+				const std::string& rapidUrl = rapidUrls[idx];
+				const int results = SearchOnRapidSource(m_category, m_name, rapidUrl);
+				if (results <= 0) {
+					if (idx + 1 < rapidUrls.size()) {
+						wxLogInfo("No rapid matches on %s for '%s', retrying with %s",
+							  rapidUrl.c_str(), m_name.c_str(),
+							  rapidUrls[idx + 1].c_str());
+					}
+					continue;
+				}
+
+				DownloadAdd(0); // add first result only
+				downloadInfo info;
+				if (!DownloadGetInfo(0, info)) {
+					wxLogWarning("Download has no downloadinfo on %s: %s",
+						     rapidUrl.c_str(), m_name.c_str());
+					continue;
+				}
+
+				if (!downloadStartedEventSent) {
+					downloadStartedEventSent = true;
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadStarted);
+				}
+
+				if (!DownloadStart()) {
+					wxLogInfo("Download finished: %s (source %s)", m_name.c_str(),
+						  rapidUrl.c_str());
+					DownloadFinished(m_category, info);
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadComplete);
+					finalizeProgress(true);
+					return;
+				}
+
+				if (idx + 1 < rapidUrls.size()) {
+					wxLogWarning("Download failed on %s for '%s', retrying with %s",
+						     rapidUrl.c_str(), m_name.c_str(),
+						     rapidUrls[idx + 1].c_str());
+				} else {
+					wxLogWarning("Download failed on %s for '%s'",
+						     rapidUrl.c_str(), m_name.c_str());
+				}
+			}
+
+			GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadFailed);
+			finalizeProgress(false);
+		} catch (...) {
+			finalizeProgress(false);
+			throw;
+		}
 	}
 
 	DownloadEnum::Category getCategory() const
@@ -659,6 +713,8 @@ void PrDownloader::GetProgress(DownloadProgress& progress)
 	progress.name = m_progress->name;
 	progress.downloaded = m_progress->downloaded;
 	progress.filesize = m_progress->filesize;
+	progress.running = m_progress->running;
+	progress.failed = m_progress->failed;
 
 	wxLogDebug("%s %d %d", progress.name.c_str(), progress.downloaded, progress.filesize);
 }
@@ -712,6 +768,8 @@ void updatelistener(int downloaded, int filesize)
 
 	m_progress->filesize = filesize;
 	m_progress->downloaded = downloaded;
+	m_progress->running = true;
+	m_progress->failed = false;
 
 	GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadProgress);
 }
@@ -802,8 +860,8 @@ PrDownloader& prDownloader()
 bool PrDownloader::IsRunning()
 {
 	slLogDebugFunc("");
-
-	return m_progress != nullptr && !m_progress->IsFinished();
+	std::lock_guard<std::mutex> lock(dlProgressMutex);
+	return m_progress != nullptr && m_progress->running;
 }
 
 void PrDownloader::UpdateApplication(const std::string& updateurl)
@@ -843,11 +901,9 @@ void PrDownloader::UpdateApplication(const std::string& updateurl)
 bool PrDownloader::DownloadUrl(const std::string& httpurl, std::string& res)
 {
 	UpdateSettings();
-	{
-		std::lock_guard<std::mutex> lock(dlProgressMutex);
-		if (m_progress == nullptr)
-			m_progress = new PrDownloader::DownloadProgress();
-		m_progress->name = httpurl;
-	}
-	return CHttpDownloader::DownloadUrl(httpurl, res);
+	StartDownloadProgressTracking(httpurl);
+	const bool ok = CHttpDownloader::DownloadUrl(httpurl, res);
+	FinishDownloadProgressTracking(httpurl, ok);
+	GlobalEventManager::Instance()->Send(GlobalEventManager::OnDownloadProgress);
+	return ok;
 }

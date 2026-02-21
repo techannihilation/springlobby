@@ -22,14 +22,22 @@ public:
 		DownloadProgress()
 		    : filesize(0)
 		    , downloaded(0)
+		    , running(false)
+		    , failed(false)
 		{
 		}
 		std::string name;
 		int filesize;
 		int downloaded;
+		bool running;
+		bool failed;
 		bool IsFinished() const
 		{
-			return downloaded >= filesize;
+			return !running;
+		}
+		bool IsFailed() const
+		{
+			return failed;
 		}
 		float GetProgressPercent()
 		{
@@ -42,6 +50,8 @@ public:
 			prg.downloaded = downloaded;
 			prg.filesize = filesize;
 			prg.name = name;
+			prg.running = running;
+			prg.failed = failed;
 		}
 	};
 	PrDownloader();
