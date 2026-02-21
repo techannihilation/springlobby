@@ -34,10 +34,12 @@ void DownloadDataViewModel::GetValue(wxVariant& variant,
 			break;
 
 		case STATUS:
-			if (downloadInfo->IsFinished()) {
-				variant = wxVariant(wxString(_("complete")));
-			} else {
+			if (downloadInfo->running) {
 				variant = wxVariant(wxString(_("downloading")));
+			} else if (downloadInfo->IsFailed()) {
+				variant = wxVariant(wxString(_("failed")));
+			} else {
+				variant = wxVariant(wxString(_("complete")));
 			}
 			break;
 

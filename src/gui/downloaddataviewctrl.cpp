@@ -73,6 +73,13 @@ void DownloadDataViewCtrl::OnDownloadStarted(wxCommandEvent& /*event*/)
 
 	PrDownloader::DownloadProgress* p = new PrDownloader::DownloadProgress;
 	prDownloader().GetProgress(*p);
+	auto item = itemsIndex.find(p->name);
+	if (item != itemsIndex.end() && item->second != nullptr) {
+		p->CopyTo(*item->second);
+		RefreshItem(*item->second);
+		delete p;
+		return;
+	}
 	AddItem(p);
 }
 
