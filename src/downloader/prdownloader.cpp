@@ -17,10 +17,14 @@
 #include <lslunitsync/unitsync.h>
 #include <lslutils/thread.h>
 #include <sys/time.h>
+#include <json/writer.h>
 #include <wx/app.h>
 #include <wx/log.h>
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
+#include <cstdio>
+#include <cstring>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -42,6 +46,7 @@ SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://repos.springrts.com/repos.gz
 SLCONFIG("/Spring/MapDownloadBaseUrl", "http://www.hakora.xyz/files/springrts/maps/", "primary base URL for map downloads (.sd7/.sdz)");
 SLCONFIG("/Spring/RapidRepoTimeoutSeconds", 0l, "timeout in seconds for rapid repo index/package downloads (0 disables timeout override)");
 SLCONFIG("/Spring/MapDownloadTimeoutSeconds", 0l, "timeout in seconds for map index/file downloads (0 disables timeout override)");
+SLCONFIG("/Spring/EngineDownloadTimeoutSeconds", 0l, "timeout in seconds for engine metadata/file downloads (0 disables timeout override)");
 
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
@@ -71,13 +76,21 @@ static long GetMapDownloadTimeoutSeconds()
 	return cfg().ReadLong("/Spring/MapDownloadTimeoutSeconds");
 }
 
+static long GetEngineDownloadTimeoutSeconds()
+{
+	return cfg().ReadLong("/Spring/EngineDownloadTimeoutSeconds");
+}
+
 struct EffectiveSourcesConfig
 {
 	std::vector<std::string> rapidMasterUrls;
 	std::vector<std::string> mapBaseUrls;
+	std::vector<DownloaderEngineProvider> engineProviders;
 	long rapidRepoTimeoutSeconds = 0;
 	long mapDownloadTimeoutSeconds = 0;
+	long engineDownloadTimeoutSeconds = 0;
 	bool loadedFromSourcesFile = false;
+	bool createdSourcesFile = false;
 	bool usingSafeDefaultsBecauseFileInvalid = false;
 	std::string sourcesFilePath;
 	std::string sourcesFileError;
@@ -86,6 +99,8 @@ struct EffectiveSourcesConfig
 static constexpr const char* kDefaultRapidMasterPrimary = "https://rapid.techa-rts.com/repos.gz";
 static constexpr const char* kDefaultRapidMasterSecondary = "https://repos.springrts.com/repos.gz";
 static constexpr const char* kDefaultMapBase = "http://www.hakora.xyz/files/springrts/maps/";
+static constexpr const char* kDefaultEngineGithubReleasesUrl = "https://api.github.com/repos/beyond-all-reason/RecoilEngine/releases?per_page=100";
+static constexpr const char* kDefaultEngineSpringFilesUrl = "https://springfiles.springrts.com/json.php";
 
 static std::string Trim(std::string value)
 {
@@ -132,14 +147,146 @@ static std::string JoinWithNewlines(const std::vector<std::string>& list)
 	return joined;
 }
 
+static std::vector<DownloaderEngineProvider> MakeDefaultEngineProviders()
+{
+	return {
+	    {"github_releases", kDefaultEngineGithubReleasesUrl, "BAR GitHub"},
+	    {"springfiles", kDefaultEngineSpringFilesUrl, "SpringFiles"},
+	};
+}
+
+static std::string BuildEngineProvidersJson(const std::vector<DownloaderEngineProvider>& providers)
+{
+	Json::Value root(Json::arrayValue);
+	for (const DownloaderEngineProvider& provider : providers) {
+		Json::Value item(Json::objectValue);
+		item["type"] = provider.type;
+		item["url"] = provider.url;
+		if (!provider.name.empty()) {
+			item["name"] = provider.name;
+		}
+		root.append(item);
+	}
+
+	Json::StreamWriterBuilder writerBuilder;
+	writerBuilder["indentation"] = "";
+	return Json::writeString(writerBuilder, root);
+}
+
 static EffectiveSourcesConfig MakeSafeDefaultsSourcesConfig()
 {
 	EffectiveSourcesConfig config;
 	config.rapidMasterUrls = {kDefaultRapidMasterPrimary, kDefaultRapidMasterSecondary};
 	config.mapBaseUrls = {kDefaultMapBase};
+	config.engineProviders = MakeDefaultEngineProviders();
 	config.rapidRepoTimeoutSeconds = 0;
 	config.mapDownloadTimeoutSeconds = 0;
+	config.engineDownloadTimeoutSeconds = 0;
 	return config;
+}
+
+static EffectiveSourcesConfig MakeLegacySourcesConfig()
+{
+	EffectiveSourcesConfig legacyConfig;
+	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterUrl());
+	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterFallbackUrl());
+	AppendUniqueUrl(legacyConfig.mapBaseUrls, NormalizeMapBaseUrl(GetMapDownloadBaseUrl()));
+	legacyConfig.engineProviders = MakeDefaultEngineProviders();
+	legacyConfig.rapidRepoTimeoutSeconds = GetRapidRepoTimeoutSeconds();
+	legacyConfig.mapDownloadTimeoutSeconds = GetMapDownloadTimeoutSeconds();
+	legacyConfig.engineDownloadTimeoutSeconds = GetEngineDownloadTimeoutSeconds();
+
+	if (legacyConfig.rapidMasterUrls.empty()) {
+		legacyConfig.rapidMasterUrls.push_back(kDefaultRapidMasterPrimary);
+	}
+	if (legacyConfig.mapBaseUrls.empty()) {
+		legacyConfig.mapBaseUrls.push_back(kDefaultMapBase);
+	}
+
+	return legacyConfig;
+}
+
+static std::string BuildSourcesConfigJson(const EffectiveSourcesConfig& config)
+{
+	Json::Value root(Json::objectValue);
+	root["version"] = 1;
+
+	Json::Value rapid(Json::objectValue);
+	Json::Value rapidMasterUrls(Json::arrayValue);
+	for (const std::string& url : config.rapidMasterUrls) {
+		rapidMasterUrls.append(url);
+	}
+	rapid["master_urls"] = rapidMasterUrls;
+	rapid["repo_timeout_seconds"] = static_cast<Json::Int64>(config.rapidRepoTimeoutSeconds);
+
+	Json::Value maps(Json::objectValue);
+	Json::Value mapBaseUrls(Json::arrayValue);
+	for (const std::string& url : config.mapBaseUrls) {
+		mapBaseUrls.append(url);
+	}
+	maps["base_urls"] = mapBaseUrls;
+	maps["download_timeout_seconds"] = static_cast<Json::Int64>(config.mapDownloadTimeoutSeconds);
+
+	Json::Value engine(Json::objectValue);
+	Json::Value providers(Json::arrayValue);
+	for (const DownloaderEngineProvider& provider : config.engineProviders) {
+		Json::Value item(Json::objectValue);
+		item["type"] = provider.type;
+		item["url"] = provider.url;
+		if (!provider.name.empty()) {
+			item["name"] = provider.name;
+		}
+		providers.append(item);
+	}
+	engine["providers"] = providers;
+	engine["download_timeout_seconds"] =
+	    static_cast<Json::Int64>(config.engineDownloadTimeoutSeconds);
+
+	root["rapid"] = rapid;
+	root["maps"] = maps;
+	root["engine"] = engine;
+
+	Json::StreamWriterBuilder writerBuilder;
+	writerBuilder["indentation"] = "  ";
+	return Json::writeString(writerBuilder, root);
+}
+
+static bool WriteFileAtomically(const std::string& path, const std::string& content,
+				std::string& error)
+{
+	const std::string tempPath = path + ".tmp";
+
+	FILE* tempFile = std::fopen(tempPath.c_str(), "wb");
+	if (tempFile == nullptr) {
+		error = "cannot open temp file: " + std::string(std::strerror(errno));
+		return false;
+	}
+
+	const size_t written = std::fwrite(content.data(), 1, content.size(), tempFile);
+	if (written != content.size()) {
+		error = "cannot write temp file";
+		std::fclose(tempFile);
+		std::remove(tempPath.c_str());
+		return false;
+	}
+	if (std::fflush(tempFile) != 0) {
+		error = "cannot flush temp file: " + std::string(std::strerror(errno));
+		std::fclose(tempFile);
+		std::remove(tempPath.c_str());
+		return false;
+	}
+	if (std::fclose(tempFile) != 0) {
+		error = "cannot close temp file: " + std::string(std::strerror(errno));
+		std::remove(tempPath.c_str());
+		return false;
+	}
+	if (std::rename(tempPath.c_str(), path.c_str()) != 0) {
+		error = "cannot replace target file: " + std::string(std::strerror(errno));
+		std::remove(tempPath.c_str());
+		return false;
+	}
+
+	return true;
 }
 
 static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
@@ -153,9 +300,14 @@ static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
 			config.loadedFromSourcesFile = true;
 			config.rapidMasterUrls = fileConfig.rapidMasterUrls;
 			config.mapBaseUrls = fileConfig.mapBaseUrls;
+			config.engineProviders = fileConfig.engineProviders;
 			config.rapidRepoTimeoutSeconds = fileConfig.rapidRepoTimeoutSeconds;
 			config.mapDownloadTimeoutSeconds = fileConfig.mapDownloadTimeoutSeconds;
+			config.engineDownloadTimeoutSeconds = fileConfig.engineDownloadTimeoutSeconds;
 			config.sourcesFilePath = fileConfig.path;
+			if (config.engineProviders.empty()) {
+				config.engineProviders = MakeDefaultEngineProviders();
+			}
 			return config;
 		}
 		case DownloaderSourcesLoadState::InvalidFile: {
@@ -170,20 +322,38 @@ static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
 			break;
 	}
 
-	EffectiveSourcesConfig legacyConfig;
-	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterUrl());
-	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterFallbackUrl());
-	AppendUniqueUrl(legacyConfig.mapBaseUrls, NormalizeMapBaseUrl(GetMapDownloadBaseUrl()));
-	legacyConfig.rapidRepoTimeoutSeconds = GetRapidRepoTimeoutSeconds();
-	legacyConfig.mapDownloadTimeoutSeconds = GetMapDownloadTimeoutSeconds();
+	EffectiveSourcesConfig legacyConfig = MakeLegacySourcesConfig();
+	legacyConfig.sourcesFilePath = fileConfig.path;
 
-	if (legacyConfig.rapidMasterUrls.empty()) {
-		legacyConfig.rapidMasterUrls.push_back(kDefaultRapidMasterPrimary);
-	}
-	if (legacyConfig.mapBaseUrls.empty()) {
-		legacyConfig.mapBaseUrls.push_back(kDefaultMapBase);
+	const std::string content = BuildSourcesConfigJson(legacyConfig);
+	std::string writeError;
+	if (!WriteFileAtomically(fileConfig.path, content, writeError)) {
+		wxLogWarning("Could not create downloader sources file '%s': %s. Using legacy /Spring/* settings.",
+			     fileConfig.path.c_str(), writeError.c_str());
+		return legacyConfig;
 	}
 
+	const DownloaderSourcesConfig reloaded =
+	    LoadDownloaderSourcesConfig(SlPaths::GetLobbyWriteDir());
+	if (reloaded.loadState == DownloaderSourcesLoadState::LoadedFromFile) {
+		EffectiveSourcesConfig config;
+		config.loadedFromSourcesFile = true;
+		config.createdSourcesFile = true;
+		config.rapidMasterUrls = reloaded.rapidMasterUrls;
+		config.mapBaseUrls = reloaded.mapBaseUrls;
+		config.engineProviders = reloaded.engineProviders;
+		config.rapidRepoTimeoutSeconds = reloaded.rapidRepoTimeoutSeconds;
+		config.mapDownloadTimeoutSeconds = reloaded.mapDownloadTimeoutSeconds;
+		config.engineDownloadTimeoutSeconds = reloaded.engineDownloadTimeoutSeconds;
+		config.sourcesFilePath = reloaded.path;
+		if (config.engineProviders.empty()) {
+			config.engineProviders = MakeDefaultEngineProviders();
+		}
+		return config;
+	}
+
+	wxLogWarning("Created downloader sources file '%s', but could not reload it (%s). Using legacy /Spring/* settings.",
+		     fileConfig.path.c_str(), reloaded.error.c_str());
 	return legacyConfig;
 }
 
@@ -214,7 +384,9 @@ static void MaybeLogSourcesConfigWarning(const EffectiveSourcesConfig& config)
 static void MaybeShowSourcesConfigInfoPopup(const EffectiveSourcesConfig& config)
 {
 	std::string message;
-	if (config.loadedFromSourcesFile) {
+	if (config.createdSourcesFile) {
+		message = "Created and loaded downloader sources from: " + config.sourcesFilePath;
+	} else if (config.loadedFromSourcesFile) {
 		message = "Loaded downloader sources from: " + config.sourcesFilePath;
 	} else if (config.usingSafeDefaultsBecauseFileInvalid) {
 		message = "Could not load downloader sources file:\n" + config.sourcesFilePath +
@@ -261,6 +433,9 @@ static void ApplyEffectiveSourcesConfig(const EffectiveSourcesConfig& config)
 				 std::to_string(config.rapidRepoTimeoutSeconds));
 	httpDownload->setOption("map_download_timeout_seconds",
 				std::to_string(config.mapDownloadTimeoutSeconds));
+	httpDownload->setOption("engine_download_timeout_seconds",
+				std::to_string(config.engineDownloadTimeoutSeconds));
+	httpDownload->setOption("engine_providers", BuildEngineProvidersJson(config.engineProviders));
 
 	if (config.mapBaseUrls.empty()) {
 		httpDownload->setOption("map_base_url", "");

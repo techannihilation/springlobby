@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,14 @@ static std::string NormalizeMapBaseUrl(std::string url)
 		url.push_back('/');
 	}
 	return url;
+}
+
+static std::string ToLowerAscii(std::string value)
+{
+	for (char& c : value) {
+		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	}
+	return value;
 }
 
 static void AppendUnique(std::vector<std::string>& list, std::string value)
@@ -69,6 +78,57 @@ static bool ParseUrlArray(const Json::Value& node, std::vector<std::string>& out
 
 	if (out.empty()) {
 		error = "URL array is empty";
+		return false;
+	}
+	return true;
+}
+
+static bool ParseEngineProviders(const Json::Value& node,
+				 std::vector<DownloaderEngineProvider>& out,
+				 std::string& error)
+{
+	if (!node.isArray()) {
+		error = "expected array of providers";
+		return false;
+	}
+
+	std::set<std::string> seen;
+	for (Json::Value::ArrayIndex i = 0; i < node.size(); ++i) {
+		const Json::Value provider = node[i];
+		if (!provider.isObject()) {
+			error = "provider entry must be an object";
+			return false;
+		}
+
+		if (!provider["type"].isString() || !provider["url"].isString()) {
+			error = "provider entry requires string fields type and url";
+			return false;
+		}
+
+		DownloaderEngineProvider parsed;
+		parsed.type = ToLowerAscii(Trim(provider["type"].asString()));
+		parsed.url = Trim(provider["url"].asString());
+		parsed.name = provider["name"].isString()
+				  ? Trim(provider["name"].asString())
+				  : "";
+
+		if (parsed.type != "github_releases" && parsed.type != "springfiles") {
+			error = "unsupported provider type: " + parsed.type;
+			return false;
+		}
+		if (parsed.url.empty()) {
+			error = "provider url cannot be empty";
+			return false;
+		}
+
+		const std::string dedupeKey = parsed.type + "\n" + parsed.url;
+		if (seen.insert(dedupeKey).second) {
+			out.push_back(std::move(parsed));
+		}
+	}
+
+	if (out.empty()) {
+		error = "providers array is empty";
 		return false;
 	}
 	return true;
@@ -202,6 +262,27 @@ DownloaderSourcesConfig LoadDownloaderSourcesConfig(const std::string& lobbyWrit
 		config.loadState = DownloaderSourcesLoadState::InvalidFile;
 		config.error = "maps." + parseError;
 		return config;
+	}
+
+	if (root.isMember("engine")) {
+		const Json::Value engine = root["engine"];
+		if (!engine.isObject()) {
+			config.loadState = DownloaderSourcesLoadState::InvalidFile;
+			config.error = "engine section must be a JSON object";
+			return config;
+		}
+
+		if (!ParseEngineProviders(engine["providers"], config.engineProviders, parseError)) {
+			config.loadState = DownloaderSourcesLoadState::InvalidFile;
+			config.error = "engine.providers: " + parseError;
+			return config;
+		}
+		if (!ParseNonNegativeLong(engine, "download_timeout_seconds",
+					  config.engineDownloadTimeoutSeconds, parseError)) {
+			config.loadState = DownloaderSourcesLoadState::InvalidFile;
+			config.error = "engine." + parseError;
+			return config;
+		}
 	}
 
 	config.loadState = DownloaderSourcesLoadState::LoadedFromFile;

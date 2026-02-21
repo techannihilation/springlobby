@@ -12,13 +12,22 @@ enum class DownloaderSourcesLoadState {
 	InvalidFile,
 };
 
+struct DownloaderEngineProvider
+{
+	std::string type;
+	std::string url;
+	std::string name;
+};
+
 struct DownloaderSourcesConfig
 {
 	DownloaderSourcesLoadState loadState = DownloaderSourcesLoadState::Missing;
 	std::vector<std::string> rapidMasterUrls;
 	std::vector<std::string> mapBaseUrls;
+	std::vector<DownloaderEngineProvider> engineProviders;
 	long rapidRepoTimeoutSeconds = 0;
 	long mapDownloadTimeoutSeconds = 0;
+	long engineDownloadTimeoutSeconds = 0;
 	std::string error;
 	std::string path;
 };
