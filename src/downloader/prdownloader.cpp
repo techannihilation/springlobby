@@ -40,14 +40,6 @@
 #include "utils/slconfig.h"
 #include "utils/slpaths.h"
 
-SLCONFIG("/Spring/PortableDownload", false, "true to download portable versions of spring, if false cache/settings/etc are shared (bogous!)");
-SLCONFIG("/Spring/RapidMasterUrl", "https://repos.springrts.com/repos.gz", "primary master url for rapid downloads");
-SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://rapid.techa-rts.com/repos.gz", "fallback master url for rapid downloads");
-SLCONFIG("/Spring/MapDownloadBaseUrl", "http://www.hakora.xyz/files/springrts/maps/", "primary base URL for map downloads (.sd7/.sdz)");
-SLCONFIG("/Spring/RapidRepoTimeoutSeconds", 45l, "timeout in seconds for rapid repo index/package downloads (0 disables timeout override)");
-SLCONFIG("/Spring/MapDownloadTimeoutSeconds", 45l, "timeout in seconds for map index/file downloads (0 disables timeout override)");
-SLCONFIG("/Spring/EngineDownloadTimeoutSeconds", 45l, "timeout in seconds for engine metadata/file downloads (0 disables timeout override)");
-
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
 
@@ -88,34 +80,17 @@ static void FinishDownloadProgressTracking(const std::string& name, bool success
 	progress->failed = !success;
 }
 
-static std::string GetRapidMasterUrl()
+static void RemoveLegacyDownloaderConfigKeys()
 {
-	return STD_STRING(cfg().ReadString("/Spring/RapidMasterUrl"));
-}
-
-static std::string GetRapidMasterFallbackUrl()
-{
-	return STD_STRING(cfg().ReadString("/Spring/RapidMasterFallbackUrl"));
-}
-
-static std::string GetMapDownloadBaseUrl()
-{
-	return STD_STRING(cfg().ReadString("/Spring/MapDownloadBaseUrl"));
-}
-
-static long GetRapidRepoTimeoutSeconds()
-{
-	return cfg().ReadLong(_T("/Spring/RapidRepoTimeoutSeconds"));
-}
-
-static long GetMapDownloadTimeoutSeconds()
-{
-	return cfg().ReadLong(_T("/Spring/MapDownloadTimeoutSeconds"));
-}
-
-static long GetEngineDownloadTimeoutSeconds()
-{
-	return cfg().ReadLong(_T("/Spring/EngineDownloadTimeoutSeconds"));
+	slConfig& config = cfg();
+	slConfig::PathGuard guard(&config, _T("/Spring"));
+	config.DeleteEntry(_T("PortableDownload"), false);
+	config.DeleteEntry(_T("RapidMasterUrl"), false);
+	config.DeleteEntry(_T("RapidMasterFallbackUrl"), false);
+	config.DeleteEntry(_T("MapDownloadBaseUrl"), false);
+	config.DeleteEntry(_T("RapidRepoTimeoutSeconds"), false);
+	config.DeleteEntry(_T("MapDownloadTimeoutSeconds"), false);
+	config.DeleteEntry(_T("EngineDownloadTimeoutSeconds"), false);
 }
 
 struct EffectiveSourcesConfig
@@ -138,7 +113,7 @@ static constexpr const char* kDefaultRapidMasterSecondary = "https://rapid.techa
 static constexpr const char* kDefaultMapBase = "http://www.hakora.xyz/files/springrts/maps/";
 static constexpr const char* kDefaultEngineGithubReleasesUrl = "https://api.github.com/repos/beyond-all-reason/RecoilEngine/releases?per_page=100";
 static constexpr const char* kDefaultEngineSpringFilesUrl = "https://springfiles.springrts.com/json.php";
-static constexpr long kDefaultDownloadTimeoutSeconds = 20;
+static constexpr long kDefaultTimeoutSeconds = 20;
 
 static void SortRapidMasterUrls(std::vector<std::string>& urls)
 {
@@ -156,39 +131,6 @@ static void SortRapidMasterUrls(std::vector<std::string>& urls)
 			 [&](const std::string& a, const std::string& b) {
 				 return rank(a) < rank(b);
 			 });
-}
-
-static std::string Trim(std::string value)
-{
-	while (!value.empty() &&
-	       std::isspace(static_cast<unsigned char>(value.front()))) {
-		value.erase(value.begin());
-	}
-	while (!value.empty() &&
-	       std::isspace(static_cast<unsigned char>(value.back()))) {
-		value.pop_back();
-	}
-	return value;
-}
-
-static std::string NormalizeMapBaseUrl(std::string url)
-{
-	url = Trim(std::move(url));
-	if (!url.empty() && url.back() != '/') {
-		url.push_back('/');
-	}
-	return url;
-}
-
-static void AppendUniqueUrl(std::vector<std::string>& out, std::string url)
-{
-	url = Trim(std::move(url));
-	if (url.empty()) {
-		return;
-	}
-	if (std::find(out.begin(), out.end(), url) == out.end()) {
-		out.push_back(std::move(url));
-	}
 }
 
 static std::string JoinWithNewlines(const std::vector<std::string>& list)
@@ -236,38 +178,10 @@ static EffectiveSourcesConfig MakeSafeDefaultsSourcesConfig()
 	SortRapidMasterUrls(config.rapidMasterUrls);
 	config.mapBaseUrls = {kDefaultMapBase};
 	config.engineProviders = MakeDefaultEngineProviders();
-	config.rapidRepoTimeoutSeconds = 45;
-	config.mapDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
-	config.engineDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
+	config.rapidRepoTimeoutSeconds = kDefaultTimeoutSeconds;
+	config.mapDownloadTimeoutSeconds = kDefaultTimeoutSeconds;
+	config.engineDownloadTimeoutSeconds = kDefaultTimeoutSeconds;
 	return config;
-}
-
-static EffectiveSourcesConfig MakeLegacySourcesConfig()
-{
-	EffectiveSourcesConfig legacyConfig;
-	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterUrl());
-	AppendUniqueUrl(legacyConfig.rapidMasterUrls, GetRapidMasterFallbackUrl());
-	AppendUniqueUrl(legacyConfig.mapBaseUrls, NormalizeMapBaseUrl(GetMapDownloadBaseUrl()));
-	legacyConfig.engineProviders = MakeDefaultEngineProviders();
-	legacyConfig.rapidRepoTimeoutSeconds = GetRapidRepoTimeoutSeconds();
-	legacyConfig.mapDownloadTimeoutSeconds = GetMapDownloadTimeoutSeconds();
-	legacyConfig.engineDownloadTimeoutSeconds = GetEngineDownloadTimeoutSeconds();
-	if (legacyConfig.mapDownloadTimeoutSeconds <= 0) {
-		legacyConfig.mapDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
-	}
-	if (legacyConfig.engineDownloadTimeoutSeconds <= 0) {
-		legacyConfig.engineDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
-	}
-
-	if (legacyConfig.rapidMasterUrls.empty()) {
-		legacyConfig.rapidMasterUrls.push_back(kDefaultRapidMasterPrimary);
-	}
-	SortRapidMasterUrls(legacyConfig.rapidMasterUrls);
-	if (legacyConfig.mapBaseUrls.empty()) {
-		legacyConfig.mapBaseUrls.push_back(kDefaultMapBase);
-	}
-
-	return legacyConfig;
 }
 
 static std::string BuildSourcesConfigJson(const EffectiveSourcesConfig& config)
@@ -386,15 +300,15 @@ static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
 			break;
 	}
 
-	EffectiveSourcesConfig legacyConfig = MakeLegacySourcesConfig();
-	legacyConfig.sourcesFilePath = fileConfig.path;
+	EffectiveSourcesConfig initialConfig = MakeSafeDefaultsSourcesConfig();
+	initialConfig.sourcesFilePath = fileConfig.path;
 
-	const std::string content = BuildSourcesConfigJson(legacyConfig);
+	const std::string content = BuildSourcesConfigJson(initialConfig);
 	std::string writeError;
 	if (!WriteFileAtomically(fileConfig.path, content, writeError)) {
-		wxLogWarning("Could not create downloader sources file '%s': %s. Using legacy /Spring/* settings.",
+		wxLogWarning("Could not create downloader sources file '%s': %s. Using safe built-in defaults for this session.",
 			     fileConfig.path.c_str(), writeError.c_str());
-		return legacyConfig;
+		return initialConfig;
 	}
 
 	const DownloaderSourcesConfig reloaded =
@@ -416,9 +330,9 @@ static EffectiveSourcesConfig LoadEffectiveSourcesConfig()
 		return config;
 	}
 
-	wxLogWarning("Created downloader sources file '%s', but could not reload it (%s). Using legacy /Spring/* settings.",
+	wxLogWarning("Created downloader sources file '%s', but could not reload it (%s). Using safe built-in defaults for this session.",
 		     fileConfig.path.c_str(), reloaded.error.c_str());
-	return legacyConfig;
+	return initialConfig;
 }
 
 static void MaybeLogSourcesConfigWarning(const EffectiveSourcesConfig& config)
@@ -560,14 +474,11 @@ public:
 				rapidUrls.push_back(m_filename);
 			} else {
 				rapidUrls = sourceConfig.rapidMasterUrls;
-			}
-			if (rapidUrls.empty()) {
-				rapidUrls.push_back(GetRapidMasterUrl());
-				const std::string fallback = GetRapidMasterFallbackUrl();
-				if (!fallback.empty() && fallback != rapidUrls.front()) {
-					rapidUrls.push_back(fallback);
 				}
-			}
+				if (rapidUrls.empty()) {
+					rapidUrls.push_back(kDefaultRapidMasterPrimary);
+					rapidUrls.push_back(kDefaultRapidMasterSecondary);
+				}
 
 			for (size_t idx = 0; idx < rapidUrls.size(); ++idx) {
 				const std::string& rapidUrl = rapidUrls[idx];
@@ -812,10 +723,10 @@ void PrDownloader::UpdateSettings()
 {
 	slLogDebugFunc("");
 
+	RemoveLegacyDownloaderConfigKeys();
 	DownloadSetConfig(CONFIG_FILESYSTEM_WRITEPATH, SlPaths::GetDownloadDir().c_str());
 	const int httpMaxParallel = sett().GetHTTPMaxParallelDownloads();
 	DownloadSetConfig(CONFIG_HTTP_MAX_PARALLEL, &httpMaxParallel);
-	//FIXME: fileSystem->setEnginePortableDownload(cfg().ReadBool(_T("/Spring/PortableDownload")));
 	const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
 	MaybeLogSourcesConfigWarning(sourceConfig);
 	ApplyEffectiveSourcesConfig(sourceConfig);
@@ -871,11 +782,8 @@ std::vector<std::string> PrDownloader::GetEffectiveRapidMasterUrls()
 	const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
 	std::vector<std::string> urls = sourceConfig.rapidMasterUrls;
 	if (urls.empty()) {
-		urls.push_back(GetRapidMasterUrl());
-		const std::string fallback = GetRapidMasterFallbackUrl();
-		if (!fallback.empty() && fallback != urls.front()) {
-			urls.push_back(fallback);
-		}
+		urls.push_back(kDefaultRapidMasterPrimary);
+		urls.push_back(kDefaultRapidMasterSecondary);
 	}
 
 	std::vector<std::string> uniqueUrls;

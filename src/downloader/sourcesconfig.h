@@ -25,9 +25,9 @@ struct DownloaderSourcesConfig
 	std::vector<std::string> rapidMasterUrls;
 	std::vector<std::string> mapBaseUrls;
 	std::vector<DownloaderEngineProvider> engineProviders;
-	long rapidRepoTimeoutSeconds = 0;
-	long mapDownloadTimeoutSeconds = 0;
-	long engineDownloadTimeoutSeconds = 0;
+	long rapidRepoTimeoutSeconds = 20;
+	long mapDownloadTimeoutSeconds = 20;
+	long engineDownloadTimeoutSeconds = 20;
 	std::string error;
 	std::string path;
 };
