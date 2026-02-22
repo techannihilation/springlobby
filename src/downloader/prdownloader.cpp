@@ -41,8 +41,8 @@
 #include "utils/slpaths.h"
 
 SLCONFIG("/Spring/PortableDownload", false, "true to download portable versions of spring, if false cache/settings/etc are shared (bogous!)");
-SLCONFIG("/Spring/RapidMasterUrl", "https://rapid.techa-rts.com/repos.gz", "primary master url for rapid downloads");
-SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://repos.springrts.com/repos.gz", "fallback master url for rapid downloads");
+SLCONFIG("/Spring/RapidMasterUrl", "https://repos.springrts.com/repos.gz", "primary master url for rapid downloads");
+SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://rapid.techa-rts.com/repos.gz", "fallback master url for rapid downloads");
 SLCONFIG("/Spring/MapDownloadBaseUrl", "http://www.hakora.xyz/files/springrts/maps/", "primary base URL for map downloads (.sd7/.sdz)");
 SLCONFIG("/Spring/RapidRepoTimeoutSeconds", 0l, "timeout in seconds for rapid repo index/package downloads (0 disables timeout override)");
 SLCONFIG("/Spring/MapDownloadTimeoutSeconds", 0l, "timeout in seconds for map index/file downloads (0 disables timeout override)");
@@ -133,8 +133,8 @@ struct EffectiveSourcesConfig
 	std::string sourcesFileError;
 };
 
-static constexpr const char* kDefaultRapidMasterPrimary = "https://rapid.techa-rts.com/repos.gz";
-static constexpr const char* kDefaultRapidMasterSecondary = "https://repos.springrts.com/repos.gz";
+static constexpr const char* kDefaultRapidMasterPrimary = "https://repos.springrts.com/repos.gz";
+static constexpr const char* kDefaultRapidMasterSecondary = "https://rapid.techa-rts.com/repos.gz";
 static constexpr const char* kDefaultMapBase = "http://www.hakora.xyz/files/springrts/maps/";
 static constexpr const char* kDefaultEngineGithubReleasesUrl = "https://api.github.com/repos/beyond-all-reason/RecoilEngine/releases?per_page=100";
 static constexpr const char* kDefaultEngineSpringFilesUrl = "https://springfiles.springrts.com/json.php";
