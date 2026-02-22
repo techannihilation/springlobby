@@ -44,9 +44,9 @@ SLCONFIG("/Spring/PortableDownload", false, "true to download portable versions 
 SLCONFIG("/Spring/RapidMasterUrl", "https://repos.springrts.com/repos.gz", "primary master url for rapid downloads");
 SLCONFIG("/Spring/RapidMasterFallbackUrl", "https://rapid.techa-rts.com/repos.gz", "fallback master url for rapid downloads");
 SLCONFIG("/Spring/MapDownloadBaseUrl", "http://www.hakora.xyz/files/springrts/maps/", "primary base URL for map downloads (.sd7/.sdz)");
-SLCONFIG("/Spring/RapidRepoTimeoutSeconds", 0l, "timeout in seconds for rapid repo index/package downloads (0 disables timeout override)");
-SLCONFIG("/Spring/MapDownloadTimeoutSeconds", 0l, "timeout in seconds for map index/file downloads (0 disables timeout override)");
-SLCONFIG("/Spring/EngineDownloadTimeoutSeconds", 0l, "timeout in seconds for engine metadata/file downloads (0 disables timeout override)");
+SLCONFIG("/Spring/RapidRepoTimeoutSeconds", 45l, "timeout in seconds for rapid repo index/package downloads (0 disables timeout override)");
+SLCONFIG("/Spring/MapDownloadTimeoutSeconds", 45l, "timeout in seconds for map index/file downloads (0 disables timeout override)");
+SLCONFIG("/Spring/EngineDownloadTimeoutSeconds", 45l, "timeout in seconds for engine metadata/file downloads (0 disables timeout override)");
 
 static PrDownloader::DownloadProgress* m_progress = nullptr;
 static std::mutex dlProgressMutex;
@@ -105,29 +105,17 @@ static std::string GetMapDownloadBaseUrl()
 
 static long GetRapidRepoTimeoutSeconds()
 {
-	const wxString key = _T("/Spring/RapidRepoTimeoutSeconds");
-	if (!cfg().Exists(key)) {
-		return 45;
-	}
-	return cfg().ReadLong(key);
+	return cfg().ReadLong(_T("/Spring/RapidRepoTimeoutSeconds"));
 }
 
 static long GetMapDownloadTimeoutSeconds()
 {
-	const wxString key = _T("/Spring/MapDownloadTimeoutSeconds");
-	if (!cfg().Exists(key)) {
-		return 45;
-	}
-	return cfg().ReadLong(key);
+	return cfg().ReadLong(_T("/Spring/MapDownloadTimeoutSeconds"));
 }
 
 static long GetEngineDownloadTimeoutSeconds()
 {
-	const wxString key = _T("/Spring/EngineDownloadTimeoutSeconds");
-	if (!cfg().Exists(key)) {
-		return 45;
-	}
-	return cfg().ReadLong(key);
+	return cfg().ReadLong(_T("/Spring/EngineDownloadTimeoutSeconds"));
 }
 
 struct EffectiveSourcesConfig
