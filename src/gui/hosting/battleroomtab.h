@@ -132,12 +132,13 @@ public:
 	void OnAutohostRandomMap(wxCommandEvent& event);
 	void OnAutohostNotify(wxCommandEvent& event);
 
-	void OnUnitsyncReloaded(wxCommandEvent& /*data*/);
-	void OnUnitsyncReloadFailed(wxCommandEvent& /*data*/);
-	void OnDownloadFailed(wxCommandEvent& /*data*/);
-	void OnResync(wxCommandEvent& event);
-	void OnRapidValidateComplete(wxCommandEvent& /*data*/);
-	void OnRapidValidateFailed(wxCommandEvent& /*data*/);
+		void OnUnitsyncReloaded(wxCommandEvent& /*data*/);
+		void OnUnitsyncReloadFailed(wxCommandEvent& /*data*/);
+		void OnDownloadComplete(wxCommandEvent& /*data*/);
+		void OnDownloadFailed(wxCommandEvent& /*data*/);
+		void OnResync(wxCommandEvent& event);
+		void OnRapidValidateComplete(wxCommandEvent& /*data*/);
+		void OnRapidValidateFailed(wxCommandEvent& /*data*/);
 
 	long AddMMOptionsToList(long pos, LSL::Enum::GameOption optFlag);
 

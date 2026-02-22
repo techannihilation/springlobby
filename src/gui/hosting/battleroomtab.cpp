@@ -379,6 +379,7 @@ BattleRoomTab::BattleRoomTab(wxWindow* parent, IBattle* battle)
 
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloaded, BattleRoomTab::OnUnitsyncReloaded);
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloadFailed, BattleRoomTab::OnUnitsyncReloadFailed);
+	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnDownloadComplete, BattleRoomTab::OnDownloadComplete);
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnDownloadFailed, BattleRoomTab::OnDownloadFailed);
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnRapidValidateComplete, BattleRoomTab::OnRapidValidateComplete);
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnRapidValidateFailed, BattleRoomTab::OnRapidValidateFailed);
@@ -1100,7 +1101,7 @@ void BattleRoomTab::OnUnitsyncReloadFailed(wxCommandEvent& /*data*/)
 		return;
 	}
 
-	if (m_resync_in_progress) {
+	if (m_resync_in_progress && m_resync_show_diag_on_next_unitsync_reload) {
 		m_resync_in_progress = false;
 		m_resync_waiting_for_validate = false;
 		m_resync_waiting_for_download = false;
@@ -1118,6 +1119,22 @@ void BattleRoomTab::OnUnitsyncReloadFailed(wxCommandEvent& /*data*/)
 				      wxOK | wxICON_WARNING);
 	}
 	UpdateResyncButtonColor();
+}
+
+void BattleRoomTab::OnDownloadComplete(wxCommandEvent& /*data*/)
+{
+	if (!m_resync_in_progress || !m_resync_waiting_for_download) {
+		return;
+	}
+
+	PrDownloader::DownloadProgress progress;
+	PrDownloader::GetProgress(progress);
+	if (progress.name != m_resync_target_game) {
+		return;
+	}
+
+	m_resync_waiting_for_download = false;
+	m_resync_show_diag_on_next_unitsync_reload = true;
 }
 
 long BattleRoomTab::AddMMOptionsToList(long pos, LSL::Enum::GameOption optFlag)
@@ -1513,7 +1530,7 @@ void BattleRoomTab::OnResync(wxCommandEvent& /*event*/)
 	m_resync_in_progress = true;
 	m_resync_waiting_for_validate = true;
 	m_resync_waiting_for_download = false;
-	m_resync_show_diag_on_next_unitsync_reload = true;
+	m_resync_show_diag_on_next_unitsync_reload = false;
 	if (m_resync_btn != nullptr) {
 		m_resync_btn->Enable(false);
 	}
@@ -1529,6 +1546,7 @@ void BattleRoomTab::OnRapidValidateComplete(wxCommandEvent& /*data*/)
 	}
 	m_resync_waiting_for_validate = false;
 	m_resync_waiting_for_download = true;
+	m_resync_show_diag_on_next_unitsync_reload = false;
 
 	prDownloader().Download(DownloadEnum::CAT_GAME, m_resync_target_game, m_resync_selected_master_url);
 }
@@ -1542,6 +1560,7 @@ void BattleRoomTab::OnRapidValidateFailed(wxCommandEvent& /*data*/)
 
 	m_resync_waiting_for_validate = false;
 	m_resync_waiting_for_download = true;
+	m_resync_show_diag_on_next_unitsync_reload = false;
 
 	prDownloader().Download(DownloadEnum::CAT_GAME, m_resync_target_game, m_resync_selected_master_url);
 }
@@ -1587,6 +1606,15 @@ void BattleRoomTab::OnDownloadFailed(wxCommandEvent& /*data*/)
 	}
 
 	if (m_resync_in_progress) {
+		PrDownloader::DownloadProgress progress;
+		PrDownloader::GetProgress(progress);
+		const bool isResyncDownload = (!m_resync_target_game.empty() && progress.name == m_resync_target_game);
+		if (!isResyncDownload) {
+			m_battle->ForceSpectator(m_battle->GetMe(), true); // auto set spectator because of failed download
+			UpdateResyncButtonColor();
+			return;
+		}
+
 		if (m_resync_master_urls.size() > 1) {
 			const wxString prompt = wxString::Format(
 			    _("Download failed.\n\nChoose another rapid master url for '%s':"),
@@ -1594,6 +1622,7 @@ void BattleRoomTab::OnDownloadFailed(wxCommandEvent& /*data*/)
 			if (chooseMasterUrl(prompt)) {
 				m_resync_waiting_for_validate = false;
 				m_resync_waiting_for_download = true;
+				m_resync_show_diag_on_next_unitsync_reload = false;
 				prDownloader().Download(DownloadEnum::CAT_GAME, m_resync_target_game, m_resync_selected_master_url);
 				return;
 			}
