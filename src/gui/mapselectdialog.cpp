@@ -110,15 +110,15 @@ MapSelectDialog::MapSelectDialog(wxWindow* parent)
 
 	Layout();
 
-	Connect(ID_VERTICAL_CHOICE, wxEVT_COMMAND_CHOICE_SELECTED, (wxObjectEventFunction)&MapSelectDialog::OnSortKeySelect);
-	Connect(ID_HORIZONTAL_CHOICE, wxEVT_COMMAND_CHOICE_SELECTED, (wxObjectEventFunction)&MapSelectDialog::OnSortKeySelect);
-	Connect(ID_FILTER_TEXT, wxEVT_COMMAND_TEXT_UPDATED, (wxObjectEventFunction)&MapSelectDialog::OnFilterTextChanged);
-	m_mapgrid->Connect(ID_MAPGRID, wxEVT_LEFT_DCLICK, (wxObjectEventFunction)&MapSelectDialog::OnMapGridLeftDClick, 0, this);
-	Connect(wxID_ANY, wxEVT_INIT_DIALOG, (wxObjectEventFunction)&MapSelectDialog::OnInit);
-	Connect(ID_MAPGRID, MapGridCtrl::MapSelectedEvt, (wxObjectEventFunction)&MapSelectDialog::OnMapSelected, 0, this);
-	Connect(ID_MAPGRID, MapGridCtrl::LoadingCompletedEvt, (wxObjectEventFunction)&MapSelectDialog::OnMapLoadingCompleted, 0, this);
-	Connect(ID_VERTICAL_DIRECTION, wxEVT_COMMAND_BUTTON_CLICKED, (wxObjectEventFunction)&MapSelectDialog::OnVerticalDirectionClicked);
-	Connect(ID_HORIZONTAL_DIRECTION, wxEVT_COMMAND_BUTTON_CLICKED, (wxObjectEventFunction)&MapSelectDialog::OnHorizontalDirectionClicked);
+	Bind(wxEVT_CHOICE, &MapSelectDialog::OnSortKeySelect, this, ID_VERTICAL_CHOICE);
+	Bind(wxEVT_CHOICE, &MapSelectDialog::OnSortKeySelect, this, ID_HORIZONTAL_CHOICE);
+	Bind(wxEVT_TEXT, &MapSelectDialog::OnFilterTextChanged, this, ID_FILTER_TEXT);
+	m_mapgrid->Bind(wxEVT_LEFT_DCLICK, &MapSelectDialog::OnMapGridLeftDClick, this);
+	Bind(wxEVT_INIT_DIALOG, &MapSelectDialog::OnInit, this);
+	Bind(wxEventTypeTag<wxCommandEvent>(MapGridCtrl::MapSelectedEvt), &MapSelectDialog::OnMapSelected, this, ID_MAPGRID);
+	Bind(wxEventTypeTag<wxCommandEvent>(MapGridCtrl::LoadingCompletedEvt), &MapSelectDialog::OnMapLoadingCompleted, this, ID_MAPGRID);
+	Bind(wxEVT_BUTTON, &MapSelectDialog::OnVerticalDirectionClicked, this, ID_VERTICAL_DIRECTION);
+	Bind(wxEVT_BUTTON, &MapSelectDialog::OnHorizontalDirectionClicked, this, ID_HORIZONTAL_DIRECTION);
 
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloaded, MapSelectDialog::OnUnitsyncReloaded);
 }

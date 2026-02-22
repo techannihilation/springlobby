@@ -62,8 +62,27 @@ private:
 	const int ANY_EVENT = 0;
 };
 
+template <typename T>
+static inline wxObjectEventFunction SlWxObjectEventFunction(T func)
+{
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
+	wxObjectEventFunction result = wxObjectEventFunction(func);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+	return result;
+}
+
 #define SUBSCRIBE_GLOBAL_EVENT(event, callbackfunc) \
-	GlobalEventManager::Instance()->Subscribe(this, event, wxObjectEventFunction(&callbackfunc), stdprintf("%s:%d %s()", __FILE__, __LINE__, __func__))
+	GlobalEventManager::Instance()->Subscribe(this, event, SlWxObjectEventFunction(&callbackfunc), stdprintf("%s:%d %s()", __FILE__, __LINE__, __func__))
 
 
 #endif // SPRINGLOBBY_HEADERGUARD_GLOBALEVENTS_H

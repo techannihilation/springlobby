@@ -27,7 +27,6 @@ std::vector<std::filesystem::path> files_older_than(std::filesystem::path dir, s
 
 bool remove_files_older_than( std::filesystem::path dir, unsigned int maxhours )
 {
-	int cnt = 0 ;
 	auto now = std::filesystem::file_time_type::clock::now() ;
 	try {
 		for( const auto& p : files_older_than(dir, now, maxhours ) )
@@ -39,4 +38,3 @@ bool remove_files_older_than( std::filesystem::path dir, unsigned int maxhours )
 		return false;
 	}
 }
-

@@ -233,6 +233,9 @@ extern void L_LOG(const char* fileName, int line, const char* funcName,
 	// for some reason wxLogger().LogV() fails on windows, see #826
 	const int res = vsnprintf(buf, sizeof(buf), format, args);
 	va_end(args);
+	if (res < 0) {
+		buf[0] = '\0';
+	}
 
 	wxLogLevel lvl;
 	switch (level) {
@@ -254,7 +257,6 @@ extern void L_LOG(const char* fileName, int line, const char* funcName,
 			break;
 	}
 
-	assert(res >= 0);
 	const wxLogRecordInfo info(fileName, line, funcName, PRD_LOG_COMPONENT);
 	wxLog::OnLog(lvl, buf, info);
 }
@@ -265,4 +267,3 @@ void Logger::RemoveOldLogfiles(const wxString& logdirpath, unsigned int maxhours
 	const std::filesystem::path cleandir = logdirpath.wc_str();
 	remove_files_older_than(cleandir, maxhours);
 }
-

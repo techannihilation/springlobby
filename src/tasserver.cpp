@@ -22,6 +22,7 @@ lsl/networking/tasserver.cpp
 #include <wx/timer.h>
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <stdexcept>
 
 #include "log.h"
@@ -1002,8 +1003,11 @@ void TASServer::ParseJson(const std::string& jsonstr)
 	wxLogDebug("JSON %s", jsonstr.c_str());
 
 	Json::Value js; // will contains the root value after parsing.
-	Json::Reader reader;
-	const bool parsingSuccessful = reader.parse(jsonstr, js);
+	Json::CharReaderBuilder builder;
+	builder["collectComments"] = false;
+	std::string errs;
+	const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+	const bool parsingSuccessful = reader && reader->parse(jsonstr.data(), jsonstr.data() + jsonstr.size(), &js, &errs);
 	if (!parsingSuccessful) {
 		wxLogWarning("Invalid json: %s", jsonstr.c_str());
 		return;

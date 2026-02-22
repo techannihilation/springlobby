@@ -1,5 +1,13 @@
 #set minimum cmake version
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
+
+# CMake 4.x requires explicit opt-in/out for some newer policies.
+if(POLICY CMP0167)
+	cmake_policy(SET CMP0167 NEW) # FindBoost module removed.
+endif()
+if(POLICY CMP0175)
+	cmake_policy(SET CMP0175 NEW) # Reject invalid add_custom_command(TARGET ...) args.
+endif()
 
 project(springlobby)
 

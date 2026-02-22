@@ -75,8 +75,8 @@ AutoBalanceDialog::AutoBalanceDialog(wxWindow* parent, const BalanceOptions& def
 	m_main_sizer->Fit(this);
 	m_main_sizer->SetSizeHints(this);
 
-	Connect(ID_CANCEL, wxEVT_COMMAND_BUTTON_CLICKED, (wxObjectEventFunction)&AutoBalanceDialog::OnCancel);
-	Connect(ID_OK, wxEVT_COMMAND_BUTTON_CLICKED, (wxObjectEventFunction)&AutoBalanceDialog::OnOk);
+	Bind(wxEVT_BUTTON, &AutoBalanceDialog::OnCancel, this, ID_CANCEL);
+	Bind(wxEVT_BUTTON, &AutoBalanceDialog::OnOk, this, ID_OK);
 
 	m_method_choice->SetSelection(defaultval.type);
 	m_clans_choice->SetSelection(defaultval.respectclans + (defaultval.respectclans && defaultval.strongclans));

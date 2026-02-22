@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -212,10 +213,13 @@ DownloaderSourcesConfig LoadDownloaderSourcesConfig(const std::string& lobbyWrit
 	}
 
 	Json::Value root;
-	Json::Reader reader;
-	if (!reader.parse(json, root)) {
+	Json::CharReaderBuilder builder;
+	builder["collectComments"] = false;
+	std::string errs;
+	const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+	if (!reader || !reader->parse(json.data(), json.data() + json.size(), &root, &errs)) {
 		config.loadState = DownloaderSourcesLoadState::InvalidFile;
-		config.error = "invalid JSON: " + reader.getFormattedErrorMessages();
+		config.error = "invalid JSON: " + errs;
 		return config;
 	}
 	if (!root.isObject()) {

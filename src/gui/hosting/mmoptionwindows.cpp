@@ -114,8 +114,8 @@ SingleOptionDialog::SingleOptionDialog(IBattle& battle, const wxString& optionta
 	SetSizer(m_main_sizer);
 	Layout();
 
-	Connect(ID_CANCEL, wxEVT_COMMAND_BUTTON_CLICKED, (wxObjectEventFunction)&SingleOptionDialog::OnCancel);
-	Connect(ID_OK, wxEVT_COMMAND_BUTTON_CLICKED, (wxObjectEventFunction)&SingleOptionDialog::OnOk);
+	Bind(wxEVT_BUTTON, &SingleOptionDialog::OnCancel, this, ID_CANCEL);
+	Bind(wxEVT_BUTTON, &SingleOptionDialog::OnOk, this, ID_OK);
 }
 
 void SingleOptionDialog::OnCancel(wxCommandEvent& /*unused*/)

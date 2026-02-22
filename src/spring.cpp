@@ -186,7 +186,7 @@ bool Spring::LaunchEngine()
 
 	// Print out command line
 	std::string stdparams;
-	for (const wxString param: engine_params) {
+	for (const wxString& param : engine_params) {
 		if (!stdparams.empty())
 			stdparams += " ";
 		stdparams += STD_STRING(param);

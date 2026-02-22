@@ -57,7 +57,7 @@ wxString ChannelListView::GetInfo()
 void ChannelListView::FilterChannel(const wxString& partial)
 {
 
-	for (auto const item : m_realChannelCollection) {
+	for (const auto& item : m_realChannelCollection) {
 		if ((partial.IsEmpty()) || (item.second->name.Contains(partial))) {
 			if (!ContainsItem(*item.second)) {
 				AddItem(*item.second);

@@ -23,6 +23,7 @@ public:
 	void OnCancel(wxCommandEvent&);
 	void OnRetry(wxCommandEvent&);
 
+	using BaseDataViewCtrl<PrDownloader::DownloadProgress>::AddItem;
 	virtual void AddItem(PrDownloader::DownloadProgress*);
 	virtual void Clear() override;
 	void ClearFinished();

@@ -25,8 +25,8 @@ DataViewCtrlHeaderMenu::~DataViewCtrlHeaderMenu()
 
 void DataViewCtrlHeaderMenu::ConnectEvents()
 {
-	Connect(HIDE_COLUMN_ID, wxEVT_COMMAND_MENU_SELECTED, wxObjectEventFunction(&DataViewCtrlHeaderMenu::OnHideColumn));
-	Connect(SHOW_ALL_COLUMNS_ID, wxEVT_COMMAND_MENU_SELECTED, wxObjectEventFunction(&DataViewCtrlHeaderMenu::OnShowColumns));
+	Bind(wxEVT_MENU, &DataViewCtrlHeaderMenu::OnHideColumn, this, HIDE_COLUMN_ID);
+	Bind(wxEVT_MENU, &DataViewCtrlHeaderMenu::OnShowColumns, this, SHOW_ALL_COLUMNS_ID);
 }
 
 void DataViewCtrlHeaderMenu::OnHideColumn(wxCommandEvent&)

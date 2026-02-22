@@ -56,7 +56,7 @@ else()
 	add_custom_target(
 		update-potfile
 		COMMAND ${XGETTEXT} -d springlobby --keyword=_ --from-code=utf-8 --no-wrap --directory ${springlobby_SOURCE_DIR} --msgid-bugs-address "https://github.com/springlobby/springlobby/issues" -o ${MESSAGES_POT_FILE} ${srcfiles}
-		DEPENDS springlobby srcfiles
+		DEPENDS springlobby ${srcfiles}
 		WORKING_DIRECTORY ${springlobby_SOURCE_DIR})
 endif()
 
@@ -68,12 +68,17 @@ else()
 
 	add_custom_target(update-po)
 
-	foreach(_poFile ${LANGUAGES})
-		add_custom_command(TARGET update-po
-			COMMAND ${MSGMERGE} --no-fuzzy-matching -vU ${_poFile}.po ${MESSAGES_POT_FILE}
-			DEPENDS ${_poFile} ${MESSAGES_POT_FILE})
+	foreach(_lang ${LANGUAGES})
+		add_custom_target(update-po-${_lang}
+			COMMAND ${MSGMERGE} --no-fuzzy-matching -vU
+				${CMAKE_CURRENT_SOURCE_DIR}/${_lang}.po
+				${MESSAGES_POT_FILE}
+			DEPENDS
+				${CMAKE_CURRENT_SOURCE_DIR}/${_lang}.po
+				${MESSAGES_POT_FILE}
+			WORKING_DIRECTORY ${springlobby_SOURCE_DIR})
+		add_dependencies(update-po update-po-${_lang})
 	endforeach()
 endif()
 
 add_custom_target(update-translations DEPENDS update-potfile update-po)
-

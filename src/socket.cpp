@@ -144,7 +144,9 @@ void Socket::StartTLS(const std::string& fingerprint)
 	m_starttls = true;
 	SSL_load_error_strings();
 	SSL_library_init();
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 	ERR_load_BIO_strings();
+#endif
 	OpenSSL_add_all_algorithms();
 	m_sslctx = SSL_CTX_new(SSLv23_client_method());
 	SSL_CTX_set_options(m_sslctx, SSL_OP_NO_SSLv3);

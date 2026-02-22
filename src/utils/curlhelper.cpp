@@ -92,8 +92,7 @@ wxString Paste2Pastebin(const wxString& message)
 	CurlWrapper cw;
 	CURL* curl_handle = cw.GetHandle();
 	struct curl_slist* m_pHeaders = NULL;
-	struct curl_httppost* m_pPostHead = NULL;
-	struct curl_httppost* m_pPostTail = NULL;
+	curl_mime* mime = nullptr;
 	static const char* url = "https://paste.springfiles.com/api/create";
 	// these header lines will overwrite/add to cURL defaults
 	m_pHeaders = curl_slist_append(m_pHeaders, "Expect:");
@@ -102,21 +101,20 @@ wxString Paste2Pastebin(const wxString& message)
 	wxCharBuffer message_buffer = message.mb_str();
 	wxCharBuffer nick_buffer = sett().GetServerAccountNick(sett().GetDefaultServer()).mb_str();
 
-	curl_formadd(&m_pPostHead,
-		     &m_pPostTail,
-		     CURLFORM_COPYNAME, "text",
-		     CURLFORM_COPYCONTENTS, (const char*)message_buffer,
-		     CURLFORM_END);
-	curl_formadd(&m_pPostHead,
-		     &m_pPostTail,
-		     CURLFORM_COPYNAME, "private",
-		     CURLFORM_COPYCONTENTS, "1",
-		     CURLFORM_END);
-	curl_formadd(&m_pPostHead,
-		     &m_pPostTail,
-		     CURLFORM_COPYNAME, "name",
-		     CURLFORM_COPYCONTENTS, (const char*)nick_buffer,
-		     CURLFORM_END);
+	mime = curl_mime_init(curl_handle);
+	if (mime) {
+		curl_mimepart* part = curl_mime_addpart(mime);
+		curl_mime_name(part, "text");
+		curl_mime_data(part, (const char*)message_buffer, CURL_ZERO_TERMINATED);
+
+		part = curl_mime_addpart(mime);
+		curl_mime_name(part, "private");
+		curl_mime_data(part, "1", CURL_ZERO_TERMINATED);
+
+		part = curl_mime_addpart(mime);
+		curl_mime_name(part, "name");
+		curl_mime_data(part, (const char*)nick_buffer, CURL_ZERO_TERMINATED);
+	}
 	curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, m_pHeaders);
 	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
 	//	curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
@@ -124,12 +122,12 @@ wxString Paste2Pastebin(const wxString& message)
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void*)&response);
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEHEADER, (void*)&rheader);
 	curl_easy_setopt(curl_handle, CURLOPT_POST, TRUE);
-	curl_easy_setopt(curl_handle, CURLOPT_HTTPPOST, m_pPostHead);
+	curl_easy_setopt(curl_handle, CURLOPT_MIMEPOST, mime);
 
 	CURLcode ret = curl_easy_perform(curl_handle);
 
-	/* cleanup curl stuff */
-	curl_formfree(m_pPostHead);
+	curl_slist_free_all(m_pHeaders);
+	curl_mime_free(mime);
 
 	if (ret == CURLE_OK) {
 		return response.GetString();

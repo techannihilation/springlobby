@@ -59,9 +59,9 @@ BaseDataViewCtrl<DataType>::BaseDataViewCtrl(const wxString& dataViewName, wxWin
 	m_DataViewName = dataViewName;
 
 	/*Link events and handlers*/
-	Connect(wxEVT_COMMAND_DATAVIEW_COLUMN_HEADER_RIGHT_CLICK, wxObjectEventFunction(&BaseDataViewCtrl::OnColumnHeaderContext));
-	Connect(DataViewCtrlHeaderMenu::HIDE_COLUMN_EVT, wxObjectEventFunction(&BaseDataViewCtrl::OnHideColumn));
-	Connect(DataViewCtrlHeaderMenu::SHOW_ALL_COLUMNS_EVT, wxObjectEventFunction(&BaseDataViewCtrl::OnShowColumns));
+	Bind(wxEVT_COMMAND_DATAVIEW_COLUMN_HEADER_RIGHT_CLICK, &BaseDataViewCtrl::OnColumnHeaderContext, this);
+	Bind(wxEventTypeTag<wxCommandEvent>(DataViewCtrlHeaderMenu::HIDE_COLUMN_EVT), &BaseDataViewCtrl::OnHideColumn, this);
+	Bind(wxEventTypeTag<wxCommandEvent>(DataViewCtrlHeaderMenu::SHOW_ALL_COLUMNS_EVT), &BaseDataViewCtrl::OnShowColumns, this);
 }
 
 template <class DataType>

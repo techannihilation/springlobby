@@ -183,16 +183,16 @@ set(WXFB_GENERATION_PATH ${wxfb_src}/generated)
 file(MAKE_DIRECTORY ${WXFB_GENERATION_PATH})
 set(wxFB_REQUIRED_VERSION "3.10.0")
 
-find_program(wxFB_EXECUTABLE NAMES wxformbuilder wxFormBuilder)
-if("${wxFB_EXECUTABLE}" MATCHES "wxFB_EXECUTABLE-NOTFOUND")
-	message(WARNING "Couldn't find wxFormBuilder! Please install wxFB (${wxFB_REQUIRED_VERSION})")
-else()
-	message(STATUS "found wxFormBuilder: ${wxFB_EXECUTABLE}")
-	execute_process(COMMAND ${wxFB_EXECUTABLE} "--version"
-		OUTPUT_VARIABLE wxFB_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
-	if(NOT ("${wxFB_VERSION}" VERSION_LESS "${wxFB_REQUIRED_VERSION}"))
-		message(FATAL_ERROR "wxFormBuilder is not of required version: ${wxFB_REQUIRED_VERSION}")
-	endif()
+	find_program(wxFB_EXECUTABLE NAMES wxformbuilder wxFormBuilder)
+	if("${wxFB_EXECUTABLE}" MATCHES "wxFB_EXECUTABLE-NOTFOUND")
+		message(STATUS "wxFormBuilder not found (requested >= ${wxFB_REQUIRED_VERSION}); using pre-generated sources")
+	else()
+		message(STATUS "found wxFormBuilder: ${wxFB_EXECUTABLE}")
+		execute_process(COMMAND ${wxFB_EXECUTABLE} "--version"
+			OUTPUT_VARIABLE wxFB_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+		if("${wxFB_VERSION}" VERSION_LESS "${wxFB_REQUIRED_VERSION}")
+			message(FATAL_ERROR "wxFormBuilder version ${wxFB_VERSION} is older than required ${wxFB_REQUIRED_VERSION}")
+		endif()
 
 
 	foreach(proj ${wxfb_projects})
