@@ -74,16 +74,17 @@ public:
 
 	void PrintAllySetup();
 
-private:
-	void UpdateBattleInfo();
-	void RegenerateOptionsList();
+	private:
+		void UpdateBattleInfo();
+		void RegenerateOptionsList();
 
-	void UpdateStatsLabels();
-	void UpdateMapInfoSummary();
-	void OnPromote(wxCommandEvent& event);
-	void OnStart(wxCommandEvent& event);
-	void OnHostNew(wxCommandEvent& event);
-	void OnLeave(wxCommandEvent& event);
+		void UpdateStatsLabels();
+		void UpdateResyncButtonColor();
+		void UpdateMapInfoSummary();
+		void OnPromote(wxCommandEvent& event);
+		void OnStart(wxCommandEvent& event);
+		void OnHostNew(wxCommandEvent& event);
+		void OnLeave(wxCommandEvent& event);
 	void OnBalance(wxCommandEvent& event);
 	void OnFixTeams(wxCommandEvent& event);
 	void OnFixColours(wxCommandEvent& event);

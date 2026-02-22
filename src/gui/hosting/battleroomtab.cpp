@@ -399,6 +399,28 @@ BattleRoomTab::~BattleRoomTab()
 		GetAui().manager->DetachPane(this);
 }
 
+void BattleRoomTab::UpdateResyncButtonColor()
+{
+	if (m_resync_btn == nullptr) {
+		return;
+	}
+	if (m_battle == nullptr) {
+		m_resync_btn->SetBackgroundColour(wxNullColour);
+		m_resync_btn->SetForegroundColour(wxNullColour);
+		m_resync_btn->Refresh();
+		return;
+	}
+
+	const unsigned int sync = m_battle->GetMe().BattleStatus().sync;
+	const bool isSynced = (sync == SYNC_SYNCED);
+	const wxColour bg = isSynced ? wxColour(0, 160, 0) : wxColour(200, 0, 0);
+	const wxColour fg(255, 255, 255);
+
+	m_resync_btn->SetBackgroundColour(bg);
+	m_resync_btn->SetForegroundColour(fg);
+	m_resync_btn->Refresh();
+}
+
 void BattleRoomTab::SplitSizerHorizontally(const bool horizontal)
 {
 	if (m_splitter->IsSplit())
@@ -452,6 +474,7 @@ void BattleRoomTab::UpdateBattleInfo()
 		UpdateBattleInfo(it->first);
 	}
 	UpdateMapInfoSummary();
+	UpdateResyncButtonColor();
 }
 
 void BattleRoomTab::UpdateBattleInfo(const wxString& Tag)
@@ -605,6 +628,7 @@ void BattleRoomTab::UpdateUser(User& user, bool userJustAdded)
 	}
 
 	m_color_sel->SetColor(lslTowxColour(user.BattleStatus().colour));
+	UpdateResyncButtonColor();
 }
 
 IBattle* BattleRoomTab::GetBattle()
@@ -1043,6 +1067,7 @@ void BattleRoomTab::OnUnitsyncReloaded(wxCommandEvent& /*data*/)
 		UpdateUser(m_battle->GetUser(i));
 	}
 	m_battle->SendMyBattleStatus(); // This should reset sync status.
+	UpdateResyncButtonColor();
 
 	if (m_resync_in_progress && m_resync_show_diag_on_next_unitsync_reload) {
 		m_resync_in_progress = false;
@@ -1092,6 +1117,7 @@ void BattleRoomTab::OnUnitsyncReloadFailed(wxCommandEvent& /*data*/)
 		customMessageBoxModal(SL_MAIN_ICON, TowxString(m_battle->GetSyncDiagnostics()), _("Not synced"),
 				      wxOK | wxICON_WARNING);
 	}
+	UpdateResyncButtonColor();
 }
 
 long BattleRoomTab::AddMMOptionsToList(long pos, LSL::Enum::GameOption optFlag)
@@ -1293,6 +1319,7 @@ void BattleRoomTab::SetBattle(IBattle* battle)
 	m_delete_btn->Enable(isBattleEnabled);
 	m_default_btn->Enable(isBattleEnabled);
 	m_browse_map_btn->Enable(isBattleEnabled);
+	m_resync_btn->Enable(isBattleEnabled);
 
 	m_ready_chk->Enable(isBattleEnabled);
 	m_spec_chk->Enable(isBattleEnabled);
@@ -1339,6 +1366,8 @@ void BattleRoomTab::SetBattle(IBattle* battle)
 	} else {
 		m_host_new_btn->Show(true);
 	}
+
+	UpdateResyncButtonColor();
 }
 
 void BattleRoomTab::RegenerateOptionsList()
@@ -1585,8 +1614,10 @@ void BattleRoomTab::OnDownloadFailed(wxCommandEvent& /*data*/)
 				      _("Re-sync"), wxOK | wxICON_WARNING);
 		customMessageBoxModal(SL_MAIN_ICON, TowxString(m_battle->GetSyncDiagnostics()), _("Not synced"),
 				      wxOK | wxICON_WARNING);
+		UpdateResyncButtonColor();
 		return;
 	}
 
 	m_battle->ForceSpectator(m_battle->GetMe(), true); //auto set spectator because of failed download
+	UpdateResyncButtonColor();
 }
