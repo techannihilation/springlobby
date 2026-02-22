@@ -5,7 +5,9 @@
 
 #include <lslunitsync/optionswrapper.h>
 #include <map>
+#include <set>
 #include <string>
+#include <vector>
 #include <wx/panel.h>
 
 #include "utils/uievents.h"
@@ -224,6 +226,9 @@ private:
 	bool m_resync_waiting_for_download = false;
 	bool m_resync_show_diag_on_next_unitsync_reload = false;
 	std::string m_resync_target_game;
+	std::vector<std::string> m_resync_master_urls;
+	std::set<std::string> m_resync_tried_master_urls;
+	std::string m_resync_selected_master_url;
 
 	enum {
 		BROOM_LEAVE = wxID_HIGHEST,

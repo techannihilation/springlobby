@@ -5,6 +5,7 @@
 
 #include <wx/event.h>
 #include <string>
+#include <vector>
 #include "lib/src/Downloader/DownloadEnum.h"
 class IDownloader;
 
@@ -72,6 +73,7 @@ public:
 	*/
 	void Download(DownloadEnum::Category cat, const std::string& filename, const std::string& url = "");
 	void ValidateRapidPoolAsync(bool deleteBroken);
+	std::vector<std::string> GetEffectiveRapidMasterUrls();
 
 	void SetIngameStatus(bool ingame);
 	void OnSpringStarted(wxCommandEvent& data);

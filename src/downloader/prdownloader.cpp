@@ -591,7 +591,12 @@ public:
 
 			// For rapid categories, retry full search+download on each configured source.
 			// This covers failures during both metadata lookup and the actual download start.
-			std::vector<std::string> rapidUrls = sourceConfig.rapidMasterUrls;
+			std::vector<std::string> rapidUrls;
+			if (!m_filename.empty()) {
+				rapidUrls.push_back(m_filename);
+			} else {
+				rapidUrls = sourceConfig.rapidMasterUrls;
+			}
 			if (rapidUrls.empty()) {
 				rapidUrls.push_back(GetRapidMasterUrl());
 				const std::string fallback = GetRapidMasterFallbackUrl();
@@ -896,6 +901,32 @@ void PrDownloader::ValidateRapidPoolAsync(bool deleteBroken)
 
 	RapidValidateItem* item = new RapidValidateItem(deleteBroken);
 	m_dl_thread->DoWork(item);
+}
+
+std::vector<std::string> PrDownloader::GetEffectiveRapidMasterUrls()
+{
+	const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
+	std::vector<std::string> urls = sourceConfig.rapidMasterUrls;
+	if (urls.empty()) {
+		urls.push_back(GetRapidMasterUrl());
+		const std::string fallback = GetRapidMasterFallbackUrl();
+		if (!fallback.empty() && fallback != urls.front()) {
+			urls.push_back(fallback);
+		}
+	}
+
+	std::vector<std::string> uniqueUrls;
+	uniqueUrls.reserve(urls.size());
+	for (const std::string& url : urls) {
+		if (url.empty()) {
+			continue;
+		}
+		if (std::find(uniqueUrls.begin(), uniqueUrls.end(), url) == uniqueUrls.end()) {
+			uniqueUrls.push_back(url);
+		}
+	}
+
+	return uniqueUrls;
 }
 
 
