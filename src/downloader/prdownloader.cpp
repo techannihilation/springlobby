@@ -445,49 +445,6 @@ static void MaybeLogSourcesConfigWarning(const EffectiveSourcesConfig& config)
 		     config.sourcesFilePath.c_str(), config.sourcesFileError.c_str());
 }
 
-static void MaybeShowSourcesConfigInfoPopup(const EffectiveSourcesConfig& config)
-{
-	std::string message;
-	if (config.createdSourcesFile) {
-		message = "Created and loaded downloader sources from: " + config.sourcesFilePath;
-	} else if (config.loadedFromSourcesFile) {
-		message = "Loaded downloader sources from: " + config.sourcesFilePath;
-	} else if (config.usingSafeDefaultsBecauseFileInvalid) {
-		message = "Could not load downloader sources file:\n" + config.sourcesFilePath +
-			  "\n\nReason: " + config.sourcesFileError +
-			  "\n\nUsing built-in defaults for this session.";
-	} else {
-		message = "Downloader sources file not found:\n" + SlPaths::GetLobbyWriteDir() +
-			  "sources.json\n\nUsing legacy /Spring/* settings.";
-	}
-
-	static std::mutex popupMutex;
-	static std::string shownSignature;
-	{
-		std::lock_guard<std::mutex> lock(popupMutex);
-		if (shownSignature == message) {
-			return;
-		}
-		shownSignature = message;
-	}
-
-	wxApp* app = wxTheApp;
-	if (app == nullptr) {
-		return;
-	}
-
-	const wxString wxMessage = TowxString(message);
-	app->CallAfter([wxMessage]() {
-		if (!ui().IsMainWindowCreated()) {
-			return;
-		}
-		wxCommandEvent* event =
-		    new wxCommandEvent(wxEVT_SHOW, MainWindow::mySHOW_INFO_MESSAGE);
-		event->SetString(wxMessage);
-		ui().mw().GetEventHandler()->QueueEvent(event);
-	});
-}
-
 static void ApplyEffectiveSourcesConfig(const EffectiveSourcesConfig& config)
 {
 	if (!config.rapidMasterUrls.empty()) {
@@ -861,7 +818,6 @@ void PrDownloader::UpdateSettings()
 	//FIXME: fileSystem->setEnginePortableDownload(cfg().ReadBool(_T("/Spring/PortableDownload")));
 	const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
 	MaybeLogSourcesConfigWarning(sourceConfig);
-	MaybeShowSourcesConfigInfoPopup(sourceConfig);
 	ApplyEffectiveSourcesConfig(sourceConfig);
 }
 
