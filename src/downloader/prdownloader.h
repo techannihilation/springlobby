@@ -71,6 +71,7 @@ public:
 		CAT_HTTP  http://.../f.  /tmp/f.zip
 	*/
 	void Download(DownloadEnum::Category cat, const std::string& filename, const std::string& url = "");
+	void ValidateRapidPoolAsync(bool deleteBroken);
 
 	void SetIngameStatus(bool ingame);
 	void OnSpringStarted(wxCommandEvent& data);

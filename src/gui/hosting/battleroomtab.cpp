@@ -50,6 +50,7 @@
 #include "ibattle.h"
 #include "iserver.h"
 #include "log.h"
+#include "downloader/prdownloader.h"
 #include "mmoptionwindows.h"
 #include "servermanager.h"
 #include "settings.h"
@@ -57,6 +58,7 @@
 #include "utils/conversion.h"
 #include "utils/globalevents.h"
 #include "utils/lslconversion.h"
+#include "utils/slpaths.h"
 #include "utils/uievents.h"
 #include "votepanel.h"
 
@@ -65,6 +67,7 @@ BEGIN_EVENT_TABLE(BattleRoomTab, wxPanel)
 EVT_BUTTON(BROOM_PROMOTE, BattleRoomTab::OnPromote)
 EVT_BUTTON(BROOM_START, BattleRoomTab::OnStart)
 EVT_BUTTON(BROOM_LEAVE, BattleRoomTab::OnLeave)
+EVT_BUTTON(BROOM_RESYNC, BattleRoomTab::OnResync)
 EVT_BUTTON(BROOM_ADDBOT, BattleRoomTab::OnAddBot)
 EVT_BUTTON(BROOM_HOST_NEW, BattleRoomTab::OnHostNew)
 
@@ -182,6 +185,8 @@ BattleRoomTab::BattleRoomTab(wxWindow* parent, IBattle* battle)
 
 	m_host_new_btn = new wxButton(this, BROOM_HOST_NEW, _("Host new..."), wxDefaultPosition, wxDefaultSize);
 	m_host_new_btn->SetToolTip(_("Host a new battle"));
+	m_resync_btn = new wxButton(this, BROOM_RESYNC, _("Re-sync"), wxDefaultPosition, wxSize(-1, CONTROL_HEIGHT));
+	m_resync_btn->SetToolTip(_("Validate rapid pool, update the current game from rapid, then reload maps/games"));
 	m_leave_btn = new wxButton(this, BROOM_LEAVE, _("Leave"), wxDefaultPosition, wxSize(-1, CONTROL_HEIGHT));
 	m_leave_btn->SetToolTip(_("Leave the battle and return to the battle list"));
 	m_promote_btn = new wxButton(this, BROOM_PROMOTE, _("Promote"), wxDefaultPosition, wxSize(-1, CONTROL_HEIGHT));
@@ -345,6 +350,7 @@ BattleRoomTab::BattleRoomTab(wxWindow* parent, IBattle* battle)
 	m_buttons_sizer->Add(m_votePanel);
 	m_buttons_sizer->AddStretchSpacer();
 	m_buttons_sizer->Add(m_host_new_btn, 0, wxEXPAND | wxALL, 2);
+	m_buttons_sizer->Add(m_resync_btn, 0, wxEXPAND | wxALL, 2);
 	m_buttons_sizer->Add(m_leave_btn, 0, wxEXPAND | wxALL, 2);
 	m_buttons_sizer->Add(m_addbot_btn, 0, wxEXPAND | wxALL, 2);
 	m_buttons_sizer->Add(m_autolock_chk, 0, wxEXPAND | wxALL, 2);
@@ -372,7 +378,10 @@ BattleRoomTab::BattleRoomTab(wxWindow* parent, IBattle* battle)
 	}
 
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloaded, BattleRoomTab::OnUnitsyncReloaded);
+	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloadFailed, BattleRoomTab::OnUnitsyncReloadFailed);
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnDownloadFailed, BattleRoomTab::OnDownloadFailed);
+	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnRapidValidateComplete, BattleRoomTab::OnRapidValidateComplete);
+	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnRapidValidateFailed, BattleRoomTab::OnRapidValidateFailed);
 }
 
 
@@ -1034,6 +1043,49 @@ void BattleRoomTab::OnUnitsyncReloaded(wxCommandEvent& /*data*/)
 		UpdateUser(m_battle->GetUser(i));
 	}
 	m_battle->SendMyBattleStatus(); // This should reset sync status.
+
+	if (m_resync_in_progress && m_resync_show_diag_on_next_unitsync_reload) {
+		m_resync_in_progress = false;
+		m_resync_waiting_for_validate = false;
+		m_resync_waiting_for_download = false;
+		m_resync_show_diag_on_next_unitsync_reload = false;
+		m_resync_target_game.clear();
+		if (m_resync_btn != nullptr) {
+			m_resync_btn->Enable(true);
+		}
+
+		try {
+			if (!m_battle->IsSynced()) {
+				customMessageBoxModal(SL_MAIN_ICON, TowxString(m_battle->GetSyncDiagnostics()), _("Not synced"),
+						      wxOK | wxICON_WARNING);
+			}
+		} catch (const std::exception& e) {
+			customMessageBoxModal(SL_MAIN_ICON, wxString::Format(_("Failed to compute sync diagnostics: %s"), e.what()),
+					      _("Not synced"), wxOK | wxICON_WARNING);
+		}
+	}
+}
+
+void BattleRoomTab::OnUnitsyncReloadFailed(wxCommandEvent& /*data*/)
+{
+	if (m_battle == nullptr) {
+		return;
+	}
+
+	if (m_resync_in_progress) {
+		m_resync_in_progress = false;
+		m_resync_waiting_for_validate = false;
+		m_resync_waiting_for_download = false;
+		m_resync_show_diag_on_next_unitsync_reload = false;
+		m_resync_target_game.clear();
+		if (m_resync_btn != nullptr) {
+			m_resync_btn->Enable(true);
+		}
+		customMessageBoxModal(SL_MAIN_ICON, _("Couldn't reload unitsync after re-sync."),
+				      _("Re-sync"), wxOK | wxICON_WARNING);
+		customMessageBoxModal(SL_MAIN_ICON, TowxString(m_battle->GetSyncDiagnostics()), _("Not synced"),
+				      wxOK | wxICON_WARNING);
+	}
 }
 
 long BattleRoomTab::AddMMOptionsToList(long pos, LSL::Enum::GameOption optFlag)
@@ -1345,10 +1397,92 @@ void BattleRoomTab::OnHostNew(wxCommandEvent& /*event*/)
 	HostBattleDialog::RunHostBattleDialog(this);
 }
 
+void BattleRoomTab::OnResync(wxCommandEvent& /*event*/)
+{
+	if (m_battle == nullptr) {
+		return;
+	}
+	if (m_resync_in_progress) {
+		return;
+	}
+	if (prDownloader().IsRunning()) {
+		customMessageBoxModal(SL_MAIN_ICON, _("Downloader is busy. Please wait for the current download to finish."),
+				      _("Re-sync"), wxOK | wxICON_INFORMATION);
+		return;
+	}
+
+	m_resync_target_game = m_battle->GetHostGameNameAndVersion();
+	if (m_resync_target_game.empty()) {
+		customMessageBoxModal(SL_MAIN_ICON, _("Battle has no game set."),
+				      _("Re-sync"), wxOK | wxICON_WARNING);
+		return;
+	}
+
+	const int answer = customMessageBox(
+	    SL_MAIN_ICON,
+	    _("Re-sync will validate your rapid pool and may delete broken files.\n\nContinue?"),
+	    _("Re-sync"), wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
+	if (answer != wxYES) {
+		return;
+	}
+
+	m_resync_in_progress = true;
+	m_resync_waiting_for_validate = true;
+	m_resync_waiting_for_download = false;
+	m_resync_show_diag_on_next_unitsync_reload = true;
+	if (m_resync_btn != nullptr) {
+		m_resync_btn->Enable(false);
+	}
+
+	SlPaths::RefreshSpringVersionList(true);
+	prDownloader().ValidateRapidPoolAsync(true);
+}
+
+void BattleRoomTab::OnRapidValidateComplete(wxCommandEvent& /*data*/)
+{
+	if (!m_resync_in_progress || !m_resync_waiting_for_validate) {
+		return;
+	}
+	m_resync_waiting_for_validate = false;
+	m_resync_waiting_for_download = true;
+
+	prDownloader().Download(DownloadEnum::CAT_GAME, m_resync_target_game);
+}
+
+void BattleRoomTab::OnRapidValidateFailed(wxCommandEvent& /*data*/)
+{
+	if (!m_resync_in_progress || !m_resync_waiting_for_validate) {
+		return;
+	}
+	wxLogWarning(_("Rapid pool validation failed; continuing with download."));
+
+	m_resync_waiting_for_validate = false;
+	m_resync_waiting_for_download = true;
+
+	prDownloader().Download(DownloadEnum::CAT_GAME, m_resync_target_game);
+}
+
 void BattleRoomTab::OnDownloadFailed(wxCommandEvent& /*data*/)
 {
 	if (m_battle == nullptr) {
 		return;
 	}
+
+	if (m_resync_in_progress) {
+		m_resync_in_progress = false;
+		m_resync_waiting_for_validate = false;
+		m_resync_waiting_for_download = false;
+		m_resync_show_diag_on_next_unitsync_reload = false;
+		m_resync_target_game.clear();
+		if (m_resync_btn != nullptr) {
+			m_resync_btn->Enable(true);
+		}
+		customMessageBoxModal(SL_MAIN_ICON, _("Re-sync failed to download the game from rapid."),
+				      _("Re-sync"), wxOK | wxICON_WARNING);
+		customMessageBoxModal(SL_MAIN_ICON, TowxString(m_battle->GetSyncDiagnostics()), _("Not synced"),
+				      wxOK | wxICON_WARNING);
+		return;
+	}
+
 	m_battle->ForceSpectator(m_battle->GetMe(), true); //auto set spectator because of failed download
 }

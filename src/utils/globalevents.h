@@ -35,9 +35,12 @@ public:
 	static const wxEventType OnDownloadComplete;
 	static const wxEventType OnDownloadFailed;
 	static const wxEventType OnDownloadProgress;
+	static const wxEventType OnRapidValidateComplete;
+	static const wxEventType OnRapidValidateFailed;
 	static const wxEventType OnUnitsyncFirstTimeLoad;
 	static const wxEventType OnUnitsyncReloaded;
 	static const wxEventType OnUnitsyncReloadRequest;
+	static const wxEventType OnUnitsyncReloadFailed;
 	static const wxEventType OnSpringTerminated;
 	static const wxEventType OnSpringStarted;
 	static const wxEventType UpdateFinished;

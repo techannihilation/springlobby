@@ -235,6 +235,7 @@ public:
 	virtual bool IsProxy() const;
 
 	virtual bool IsSynced(); //cannot be const
+	std::string GetSyncDiagnostics();
 
 	virtual bool IsFounderMe() const;
 	virtual bool IsFounder(const User& user) const;

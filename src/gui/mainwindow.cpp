@@ -318,6 +318,7 @@ void MainWindow::OnUnitSyncReloadRequest(wxCommandEvent& /*unused*/)
 		GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloaded);
 	} else {
 		wxLogWarning("Couldn't reload unitsync");
+		GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadFailed);
 	}
 }
 
@@ -580,6 +581,7 @@ void MainWindow::OnUnitSyncReload(wxCommandEvent& /*unused*/)
 		return;
 	}
 	wxLogWarning("Couldn't reload unitsync");
+	GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadFailed);
 }
 
 void MainWindow::OnUnitSyncReloaded(wxCommandEvent& /*unused*/)

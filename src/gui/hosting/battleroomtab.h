@@ -5,6 +5,7 @@
 
 #include <lslunitsync/optionswrapper.h>
 #include <map>
+#include <string>
 #include <wx/panel.h>
 
 #include "utils/uievents.h"
@@ -129,7 +130,11 @@ private:
 	void OnAutohostNotify(wxCommandEvent& event);
 
 	void OnUnitsyncReloaded(wxCommandEvent& /*data*/);
+	void OnUnitsyncReloadFailed(wxCommandEvent& /*data*/);
 	void OnDownloadFailed(wxCommandEvent& /*data*/);
+	void OnResync(wxCommandEvent& event);
+	void OnRapidValidateComplete(wxCommandEvent& /*data*/);
+	void OnRapidValidateFailed(wxCommandEvent& /*data*/);
 
 	long AddMMOptionsToList(long pos, LSL::Enum::GameOption optFlag);
 
@@ -194,6 +199,7 @@ private:
 	wxButton* m_default_btn;
 	wxButton* m_browse_map_btn;
 	wxButton* m_host_new_btn;
+	wxButton* m_resync_btn;
 
 	wxMenu* m_manage_users_mnu;
 	wxMenuItem* m_lock_balance_mnu;
@@ -212,6 +218,12 @@ private:
 	wxListCtrl* m_opts_list;
 
 	EventReceiverFunc<BattleRoomTab, UiEvents::UiEventData, &BattleRoomTab::OnBattleActionEvent> m_BattleActionSink;
+
+	bool m_resync_in_progress = false;
+	bool m_resync_waiting_for_validate = false;
+	bool m_resync_waiting_for_download = false;
+	bool m_resync_show_diag_on_next_unitsync_reload = false;
+	std::string m_resync_target_game;
 
 	enum {
 		BROOM_LEAVE = wxID_HIGHEST,
@@ -250,7 +262,8 @@ private:
 		BROOM_AUTOSPECT,
 		BROOM_AUTOSTART,
 		BROOM_AUTOCONTROL,
-		BROOM_HOST_NEW
+		BROOM_HOST_NEW,
+		BROOM_RESYNC
 	};
 
 	DECLARE_EVENT_TABLE()

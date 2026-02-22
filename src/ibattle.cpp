@@ -92,6 +92,65 @@ bool IBattle::IsSynced()
 	return true;
 }
 
+std::string IBattle::GetSyncDiagnostics()
+{
+	auto appendLine = [](std::string& out, const std::string& line) {
+		out += line;
+		out += "\n";
+	};
+
+	std::string out;
+	appendLine(out, "Host engine: " + GetEngineName() + " " + GetEngineVersion());
+	appendLine(out, "Local engine index: " + SlPaths::GetCurrentUsedSpringIndex());
+	appendLine(out, "");
+
+	appendLine(out, "Host game: " + m_host_game.name);
+	appendLine(out, "Host game hash: " + m_host_game.hash);
+	appendLine(out, "Host map: " + m_host_map.name);
+	appendLine(out, "Host map hash: " + m_host_map.hash);
+	appendLine(out, "");
+
+	try {
+		const LSL::UnitsyncGame& localGame = LoadGame();
+		appendLine(out, "Local game: " + localGame.name);
+		appendLine(out, "Local game hash: " + localGame.hash);
+	} catch (const std::exception& e) {
+		appendLine(out, std::string("Local game: <error> ") + e.what());
+	}
+	try {
+		const LSL::UnitsyncMap& localMap = LoadMap();
+		appendLine(out, "Local map: " + localMap.name);
+		appendLine(out, "Local map hash: " + localMap.hash);
+	} catch (const std::exception& e) {
+		appendLine(out, std::string("Local map: <error> ") + e.what());
+	}
+	appendLine(out, "");
+
+	std::string reason = "Unknown";
+	try {
+		if (!m_host_game.name.empty() && m_local_game.name != m_host_game.name) {
+			reason = "Game name mismatch";
+		} else if (!m_host_map.name.empty() && m_local_map.name != m_host_map.name) {
+			reason = "Map name mismatch";
+		} else if (!m_host_game.hash.empty() && m_host_game.hash != "0" && m_host_game.hash != m_local_game.hash) {
+			reason = "Game hash mismatch";
+		} else if (!m_host_map.hash.empty() && m_host_map.hash != "0" && m_host_map.hash != m_local_map.hash) {
+			reason = "Map hash mismatch";
+		} else if (!GameExists()) {
+			reason = "Game missing";
+		} else if (!MapExists()) {
+			reason = "Map missing";
+		} else {
+			reason = "Synced";
+		}
+	} catch (const std::exception& e) {
+		reason = std::string("Error while checking sync: ") + e.what();
+	}
+
+	appendLine(out, "Result: " + reason);
+	return out;
+}
+
 const std::vector<LSL::lslColor>& IBattle::GetFixColoursPalette(int numteams) const
 {
 	return GetBigFixColoursPalette(numteams);

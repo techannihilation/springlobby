@@ -702,8 +702,16 @@ private:
 			}
 			case DownloadEnum::CAT_MAP:
 			case DownloadEnum::CAT_GAME:
+				if (ui().IsMainWindowCreated()) {
+					// Reload unitsync on the GUI thread (worker-thread reload has caused crashes
+					// with some engine bundles).
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadRequest);
+					break;
+				}
+
 				if (!LSL::usync().ReloadUnitSyncLib()) {
 					wxLogWarning("Couldn't reload unitsync!");
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadFailed);
 					break;
 				}
 				if (cat == DownloadEnum::CAT_MAP) {
@@ -857,6 +865,37 @@ void PrDownloader::Download(DownloadEnum::Category cat, const std::string& filen
 	wxLogDebug("Starting download of %s, %s %d", filename.c_str(), url.c_str(), cat);
 	DownloadItem* dl_item = new DownloadItem(cat, filename, url);
 	m_dl_thread->DoWork(dl_item);
+}
+
+class RapidValidateItem : public LSL::WorkItem
+{
+private:
+	bool m_deleteBroken;
+
+public:
+	explicit RapidValidateItem(bool deleteBroken)
+	    : m_deleteBroken(deleteBroken)
+	{
+	}
+
+	void Run()
+	{
+		slLogDebugFunc("");
+		const bool ok = DownloadRapidValidate(m_deleteBroken);
+		if (ok) {
+			GlobalEventManager::Instance()->Send(GlobalEventManager::OnRapidValidateComplete);
+		} else {
+			GlobalEventManager::Instance()->Send(GlobalEventManager::OnRapidValidateFailed);
+		}
+	}
+};
+
+void PrDownloader::ValidateRapidPoolAsync(bool deleteBroken)
+{
+	slLogDebugFunc("");
+
+	RapidValidateItem* item = new RapidValidateItem(deleteBroken);
+	m_dl_thread->DoWork(item);
 }
 
 

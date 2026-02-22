@@ -10,11 +10,14 @@ const wxEventType GlobalEventManager::OnDownloadStarted = wxNewEventType();
 const wxEventType GlobalEventManager::OnDownloadComplete = wxNewEventType();
 const wxEventType GlobalEventManager::OnDownloadFailed = wxNewEventType();
 const wxEventType GlobalEventManager::OnDownloadProgress = wxNewEventType();
+const wxEventType GlobalEventManager::OnRapidValidateComplete = wxNewEventType();
+const wxEventType GlobalEventManager::OnRapidValidateFailed = wxNewEventType();
 
 const wxEventType GlobalEventManager::OnUnitsyncFirstTimeLoad =
     wxNewEventType();
 const wxEventType GlobalEventManager::OnUnitsyncReloaded = wxNewEventType();
 const wxEventType GlobalEventManager::OnUnitsyncReloadRequest = wxNewEventType();
+const wxEventType GlobalEventManager::OnUnitsyncReloadFailed = wxNewEventType();
 const wxEventType GlobalEventManager::OnLobbyDownloaded = wxNewEventType();
 const wxEventType GlobalEventManager::OnSpringTerminated = wxNewEventType();
 const wxEventType GlobalEventManager::OnSpringStarted = wxNewEventType();
