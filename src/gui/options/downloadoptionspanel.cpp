@@ -37,7 +37,7 @@ DownloadOptionsPanel::DownloadOptionsPanel(wxWindow* parent)
 
 	wxBoxSizer* m_main_sizer = new wxBoxSizer(wxVERTICAL);
 	m_parallel_http = new wxSpinCtrl(this, wxID_ANY, wxString::Format(_T("%d"), sett().GetHTTPMaxParallelDownloads()));
-	m_parallel_http->SetRange(1, 10);
+	m_parallel_http->SetRange(1, 32);
 	m_parallel_http_sizer = new wxStaticBoxSizer(wxHORIZONTAL, this, _("Parallel HTTP Connections when downloading content"));
 	m_parallel_http_sizer->Add(m_parallel_http);
 

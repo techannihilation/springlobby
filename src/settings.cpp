@@ -199,10 +199,23 @@ void Settings::SetShowIPAddresses(bool value)
 
 int Settings::GetHTTPMaxParallelDownloads()
 {
-	return cfg().Read(_T("/General/ParallelHTTPCount"), 3);
+	int value = cfg().Read(_T("/General/ParallelHTTPCount"), 12);
+	if (value < 1) {
+		value = 1;
+	}
+	if (value > 32) {
+		value = 32;
+	}
+	return value;
 }
 void Settings::SetHTTPMaxParallelDownloads(int value)
 {
+	if (value < 1) {
+		value = 1;
+	}
+	if (value > 32) {
+		value = 32;
+	}
 	cfg().Write(_T("/General/ParallelHTTPCount"), value);
 }
 

@@ -816,6 +816,8 @@ void PrDownloader::UpdateSettings()
 	slLogDebugFunc("");
 
 	DownloadSetConfig(CONFIG_FILESYSTEM_WRITEPATH, SlPaths::GetDownloadDir().c_str());
+	const int httpMaxParallel = sett().GetHTTPMaxParallelDownloads();
+	DownloadSetConfig(CONFIG_HTTP_MAX_PARALLEL, &httpMaxParallel);
 	//FIXME: fileSystem->setEnginePortableDownload(cfg().ReadBool(_T("/Spring/PortableDownload")));
 	const EffectiveSourcesConfig sourceConfig = LoadEffectiveSourcesConfig();
 	MaybeLogSourcesConfigWarning(sourceConfig);
