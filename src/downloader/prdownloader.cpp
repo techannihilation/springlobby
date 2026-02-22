@@ -105,17 +105,29 @@ static std::string GetMapDownloadBaseUrl()
 
 static long GetRapidRepoTimeoutSeconds()
 {
-	return cfg().ReadLong("/Spring/RapidRepoTimeoutSeconds");
+	const wxString key = _T("/Spring/RapidRepoTimeoutSeconds");
+	if (!cfg().Exists(key)) {
+		return 45;
+	}
+	return cfg().ReadLong(key);
 }
 
 static long GetMapDownloadTimeoutSeconds()
 {
-	return cfg().ReadLong("/Spring/MapDownloadTimeoutSeconds");
+	const wxString key = _T("/Spring/MapDownloadTimeoutSeconds");
+	if (!cfg().Exists(key)) {
+		return 45;
+	}
+	return cfg().ReadLong(key);
 }
 
 static long GetEngineDownloadTimeoutSeconds()
 {
-	return cfg().ReadLong("/Spring/EngineDownloadTimeoutSeconds");
+	const wxString key = _T("/Spring/EngineDownloadTimeoutSeconds");
+	if (!cfg().Exists(key)) {
+		return 45;
+	}
+	return cfg().ReadLong(key);
 }
 
 struct EffectiveSourcesConfig
@@ -235,9 +247,9 @@ static EffectiveSourcesConfig MakeSafeDefaultsSourcesConfig()
 	SortRapidMasterUrls(config.rapidMasterUrls);
 	config.mapBaseUrls = {kDefaultMapBase};
 	config.engineProviders = MakeDefaultEngineProviders();
-	config.rapidRepoTimeoutSeconds = 0;
-	config.mapDownloadTimeoutSeconds = 0;
-	config.engineDownloadTimeoutSeconds = 0;
+	config.rapidRepoTimeoutSeconds = 45;
+	config.mapDownloadTimeoutSeconds = 45;
+	config.engineDownloadTimeoutSeconds = 45;
 	return config;
 }
 
