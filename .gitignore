@@ -49,3 +49,7 @@ Makefile
 
 build/
 develop/
+
+# local / agent-specific files
+/AGENTS.md
+/sources.json
