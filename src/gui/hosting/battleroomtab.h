@@ -223,14 +223,15 @@ private:
 
 	EventReceiverFunc<BattleRoomTab, UiEvents::UiEventData, &BattleRoomTab::OnBattleActionEvent> m_BattleActionSink;
 
-	bool m_resync_in_progress = false;
-	bool m_resync_waiting_for_validate = false;
-	bool m_resync_waiting_for_download = false;
-	bool m_resync_show_diag_on_next_unitsync_reload = false;
-	std::string m_resync_target_game;
-	std::vector<std::string> m_resync_master_urls;
-	std::set<std::string> m_resync_tried_master_urls;
-	std::string m_resync_selected_master_url;
+		bool m_resync_in_progress = false;
+		bool m_resync_waiting_for_validate = false;
+		bool m_resync_waiting_for_download = false;
+		bool m_resync_show_diag_on_next_unitsync_reload = false;
+		int m_resync_unitsync_reload_retries = 0;
+		std::string m_resync_target_game;
+		std::vector<std::string> m_resync_master_urls;
+		std::set<std::string> m_resync_tried_master_urls;
+		std::string m_resync_selected_master_url;
 
 	enum {
 		BROOM_LEAVE = wxID_HIGHEST,
