@@ -139,6 +139,24 @@ static constexpr const char* kDefaultMapBase = "http://www.hakora.xyz/files/spri
 static constexpr const char* kDefaultEngineGithubReleasesUrl = "https://api.github.com/repos/beyond-all-reason/RecoilEngine/releases?per_page=100";
 static constexpr const char* kDefaultEngineSpringFilesUrl = "https://springfiles.springrts.com/json.php";
 
+static void SortRapidMasterUrls(std::vector<std::string>& urls)
+{
+	const auto rank = [](const std::string& url) -> int {
+		if (url == kDefaultRapidMasterPrimary) {
+			return 0;
+		}
+		if (url == kDefaultRapidMasterSecondary) {
+			return 1;
+		}
+		return 2;
+	};
+
+	std::stable_sort(urls.begin(), urls.end(),
+			 [&](const std::string& a, const std::string& b) {
+				 return rank(a) < rank(b);
+			 });
+}
+
 static std::string Trim(std::string value)
 {
 	while (!value.empty() &&
@@ -214,6 +232,7 @@ static EffectiveSourcesConfig MakeSafeDefaultsSourcesConfig()
 {
 	EffectiveSourcesConfig config;
 	config.rapidMasterUrls = {kDefaultRapidMasterPrimary, kDefaultRapidMasterSecondary};
+	SortRapidMasterUrls(config.rapidMasterUrls);
 	config.mapBaseUrls = {kDefaultMapBase};
 	config.engineProviders = MakeDefaultEngineProviders();
 	config.rapidRepoTimeoutSeconds = 0;
@@ -236,6 +255,7 @@ static EffectiveSourcesConfig MakeLegacySourcesConfig()
 	if (legacyConfig.rapidMasterUrls.empty()) {
 		legacyConfig.rapidMasterUrls.push_back(kDefaultRapidMasterPrimary);
 	}
+	SortRapidMasterUrls(legacyConfig.rapidMasterUrls);
 	if (legacyConfig.mapBaseUrls.empty()) {
 		legacyConfig.mapBaseUrls.push_back(kDefaultMapBase);
 	}
