@@ -138,6 +138,7 @@ static constexpr const char* kDefaultRapidMasterSecondary = "https://rapid.techa
 static constexpr const char* kDefaultMapBase = "http://www.hakora.xyz/files/springrts/maps/";
 static constexpr const char* kDefaultEngineGithubReleasesUrl = "https://api.github.com/repos/beyond-all-reason/RecoilEngine/releases?per_page=100";
 static constexpr const char* kDefaultEngineSpringFilesUrl = "https://springfiles.springrts.com/json.php";
+static constexpr long kDefaultDownloadTimeoutSeconds = 20;
 
 static void SortRapidMasterUrls(std::vector<std::string>& urls)
 {
@@ -236,8 +237,8 @@ static EffectiveSourcesConfig MakeSafeDefaultsSourcesConfig()
 	config.mapBaseUrls = {kDefaultMapBase};
 	config.engineProviders = MakeDefaultEngineProviders();
 	config.rapidRepoTimeoutSeconds = 45;
-	config.mapDownloadTimeoutSeconds = 45;
-	config.engineDownloadTimeoutSeconds = 45;
+	config.mapDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
+	config.engineDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
 	return config;
 }
 
@@ -251,6 +252,12 @@ static EffectiveSourcesConfig MakeLegacySourcesConfig()
 	legacyConfig.rapidRepoTimeoutSeconds = GetRapidRepoTimeoutSeconds();
 	legacyConfig.mapDownloadTimeoutSeconds = GetMapDownloadTimeoutSeconds();
 	legacyConfig.engineDownloadTimeoutSeconds = GetEngineDownloadTimeoutSeconds();
+	if (legacyConfig.mapDownloadTimeoutSeconds <= 0) {
+		legacyConfig.mapDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
+	}
+	if (legacyConfig.engineDownloadTimeoutSeconds <= 0) {
+		legacyConfig.engineDownloadTimeoutSeconds = kDefaultDownloadTimeoutSeconds;
+	}
 
 	if (legacyConfig.rapidMasterUrls.empty()) {
 		legacyConfig.rapidMasterUrls.push_back(kDefaultRapidMasterPrimary);
