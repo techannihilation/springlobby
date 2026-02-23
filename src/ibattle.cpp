@@ -65,29 +65,30 @@ bool IBattle::IsSynced()
 {
 	LoadGame();
 	LoadMap();
-	if (!m_host_game.name.empty() && m_local_game.name != m_host_game.name) {
-		wxLogWarning("Not synced: game name doesn't match host:'%s' local:'%s'", m_host_game.name.c_str(), m_local_game.name.c_str());
-		return false;
+
+	// Prefer existence/hash checks over comparing local vs host strings: the local game/map
+	// may be empty if unitsync can't find content, and reporting "name mismatch" is misleading.
+	if (!m_host_game.name.empty()) {
+		if (!GameExists(false)) {
+			wxLogWarning("Not synced: game doesn't exist: %s", m_host_game.name.c_str());
+			return false;
+		}
+		if (!m_host_game.hash.empty() && m_host_game.hash != "0" && !GameExists(true)) {
+			wxLogWarning("Not synced: game hash doesn't match host:'%s' local:'%s'",
+				     m_host_game.hash.c_str(), m_local_game.hash.c_str());
+			return false;
+		}
 	}
-	if (!m_host_map.name.empty() && m_local_map.name != m_host_map.name) {
-		wxLogWarning("Not synced: map name doesn't match host:'%s' local:'%s'", m_host_map.name.c_str(), m_local_map.name.c_str());
-		return false;
-	}
-	if (!m_host_game.hash.empty() && m_host_game.hash != "0" && m_host_game.hash != m_local_game.hash) {
-		wxLogWarning("Not synced: game hash doesn't match host:'%s' local:'%s'", m_host_game.hash.c_str(), m_local_game.hash.c_str());
-		return false;
-	}
-	if (!m_host_map.hash.empty() && m_host_map.hash != "0" && m_host_map.hash != m_local_map.hash) {
-		wxLogWarning("Not synced: map hash doesn't match host:'%s' local:'%s'", m_host_map.hash.c_str(), m_local_map.hash.c_str());
-		return false;
-	}
-	if (!GameExists()) {
-		wxLogWarning("Not synced: game doesn't exist: %s %s", m_host_game.name.c_str());
-		return false;
-	}
-	if (!MapExists()) {
-		wxLogWarning("Not synced: map doesn't exist: %s %s", m_host_map.name.c_str());
-		return false;
+	if (!m_host_map.name.empty()) {
+		if (!MapExists(false)) {
+			wxLogWarning("Not synced: map doesn't exist: %s", m_host_map.name.c_str());
+			return false;
+		}
+		if (!m_host_map.hash.empty() && m_host_map.hash != "0" && !MapExists(true)) {
+			wxLogWarning("Not synced: map hash doesn't match host:'%s' local:'%s'",
+				     m_host_map.hash.c_str(), m_local_map.hash.c_str());
+			return false;
+		}
 	}
 	return true;
 }
@@ -128,19 +129,21 @@ std::string IBattle::GetSyncDiagnostics()
 
 	std::string reason = "Unknown";
 	try {
-		if (!m_host_game.name.empty() && m_local_game.name != m_host_game.name) {
-			reason = "Game name mismatch";
-		} else if (!m_host_map.name.empty() && m_local_map.name != m_host_map.name) {
-			reason = "Map name mismatch";
-		} else if (!m_host_game.hash.empty() && m_host_game.hash != "0" && m_host_game.hash != m_local_game.hash) {
-			reason = "Game hash mismatch";
-		} else if (!m_host_map.hash.empty() && m_host_map.hash != "0" && m_host_map.hash != m_local_map.hash) {
-			reason = "Map hash mismatch";
-		} else if (!GameExists()) {
-			reason = "Game missing";
-		} else if (!MapExists()) {
-			reason = "Map missing";
-		} else {
+		if (!m_host_game.name.empty()) {
+			if (!GameExists(false)) {
+				reason = "Game missing";
+			} else if (!m_host_game.hash.empty() && m_host_game.hash != "0" && !GameExists(true)) {
+				reason = "Game hash mismatch";
+			}
+		}
+		if (reason == "Unknown" && !m_host_map.name.empty()) {
+			if (!MapExists(false)) {
+				reason = "Map missing";
+			} else if (!m_host_map.hash.empty() && m_host_map.hash != "0" && !MapExists(true)) {
+				reason = "Map hash mismatch";
+			}
+		}
+		if (reason == "Unknown") {
 			reason = "Synced";
 		}
 	} catch (const std::exception& e) {
@@ -841,12 +844,22 @@ const LSL::UnitsyncGame& IBattle::LoadGame()
 	if (m_game_loaded || m_host_game.name.empty()) {
 		return m_local_game;
 	}
-	if (!GameExists(true)) {
+	if (!GameExists(false)) {
 		wxLogWarning("Game doesn't exist");
 		return m_local_game;
 	}
-	SetLocalGame(LSL::usync().GetGame(m_host_game.name));
-	const bool options_loaded = CustomBattleOptions().loadOptions(LSL::Enum::ModOption, m_host_game.name);
+
+	// Load the local game by name even if the hash doesn't match the host. This ensures sync
+	// diagnostics can show the local hash and report a hash mismatch rather than an empty name.
+	try {
+		SetLocalGame(LSL::usync().GetGame(m_host_game.name));
+	} catch (const std::exception& e) {
+		wxLogWarning("Failed to load game '%s': %s", m_host_game.name.c_str(), e.what());
+		return m_local_game;
+	}
+
+	const bool options_loaded =
+	    CustomBattleOptions().loadOptions(LSL::Enum::ModOption, m_host_game.name);
 
 	if (!options_loaded) {
 		wxLogWarning("couldn't load the game options");
