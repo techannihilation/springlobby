@@ -5,6 +5,7 @@
 
 #include <wx/frame.h>
 #include <wx/intl.h>
+#include <wx/timer.h>
 #include "gui/windowattributespickle.h"
 class Ui;
 class Channel;
@@ -39,6 +40,7 @@ class Statusbar;
 class OptionsDialog;
 class ReplayTraits;
 class wxFocusEvent;
+class wxTimerEvent;
 
 extern const wxEventType MainwindowMessageEvent;
 
@@ -115,6 +117,9 @@ public:
 private:
 	void OnUnitSyncReloaded(wxCommandEvent& /*unused*/);
 	void OnUnitSyncReloadRequest(wxCommandEvent& /*unused*/);
+	void OnUnitSyncReloadRequestPostDownload(wxCommandEvent& /*unused*/);
+	void OnUnitsyncReloadTimer(wxTimerEvent& event);
+	void PerformUnitsyncReload();
 
 private:
 	wxMenuBar* m_menubar;
@@ -146,6 +151,8 @@ private:
 	wxLogWindow* m_log_win;
 
 	bool m_has_focus;
+	wxTimer m_unitsync_reload_timer;
+	bool m_unitsync_reload_postdownload_pending = false;
 
 	enum {
 		MENU_ABOUT = wxID_ABOUT,

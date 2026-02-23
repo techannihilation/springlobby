@@ -17,6 +17,8 @@ const wxEventType GlobalEventManager::OnUnitsyncFirstTimeLoad =
     wxNewEventType();
 const wxEventType GlobalEventManager::OnUnitsyncReloaded = wxNewEventType();
 const wxEventType GlobalEventManager::OnUnitsyncReloadRequest = wxNewEventType();
+const wxEventType GlobalEventManager::OnUnitsyncReloadRequestPostDownload =
+    wxNewEventType();
 const wxEventType GlobalEventManager::OnUnitsyncReloadFailed = wxNewEventType();
 const wxEventType GlobalEventManager::OnLobbyDownloaded = wxNewEventType();
 const wxEventType GlobalEventManager::OnSpringTerminated = wxNewEventType();

@@ -40,6 +40,7 @@ public:
 	static const wxEventType OnUnitsyncFirstTimeLoad;
 	static const wxEventType OnUnitsyncReloaded;
 	static const wxEventType OnUnitsyncReloadRequest;
+	static const wxEventType OnUnitsyncReloadRequestPostDownload;
 	static const wxEventType OnUnitsyncReloadFailed;
 	static const wxEventType OnSpringTerminated;
 	static const wxEventType OnSpringStarted;

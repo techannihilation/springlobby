@@ -582,13 +582,17 @@ private:
 			}
 			case DownloadEnum::CAT_MAP:
 			case DownloadEnum::CAT_GAME:
-				if (ui().IsMainWindowCreated()) {
-					// Reload unitsync on the GUI thread (worker-thread reload has caused crashes
-					// with some engine bundles).
-					GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadRequest);
+				// Prefer GUI-thread unitsync reload (worker-thread reload has caused crashes with
+				// some engine bundles). Also avoid calling ui() from this worker thread.
+				//
+				// Rapid/game downloads can also require a short delay before reloading unitsync,
+				// otherwise unitsync may not yet see freshly updated pool/packages metadata.
+				if (wxTheApp != nullptr && wxTheApp->IsMainLoopRunning()) {
+					GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadRequestPostDownload);
 					break;
 				}
 
+				// Fallback for non-GUI contexts where the wx main loop isn't running.
 				if (!LSL::usync().ReloadUnitSyncLib()) {
 					wxLogWarning("Couldn't reload unitsync!");
 					GlobalEventManager::Instance()->Send(GlobalEventManager::OnUnitsyncReloadFailed);

@@ -240,6 +240,11 @@ MainWindow::MainWindow()
 
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloaded, MainWindow::OnUnitSyncReloaded);
 	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloadRequest, MainWindow::OnUnitSyncReloadRequest);
+	SUBSCRIBE_GLOBAL_EVENT(GlobalEventManager::OnUnitsyncReloadRequestPostDownload, MainWindow::OnUnitSyncReloadRequestPostDownload);
+
+	const int timerId = wxNewId();
+	m_unitsync_reload_timer.SetOwner(this, timerId);
+	Bind(wxEVT_TIMER, &MainWindow::OnUnitsyncReloadTimer, this, timerId);
 }
 
 wxBitmap MainWindow::GetTabIcon(const unsigned char* data, size_t size) const
@@ -275,6 +280,7 @@ void MainWindow::SetLogWin(wxLogWindow* log)
 }
 MainWindow::~MainWindow()
 {
+	m_unitsync_reload_timer.Stop();
 	GlobalEventManager::Instance()->UnSubscribeAll(this);
 	Logger::ShowDebugWindow(false);
 	SetEvtHandlerEnabled(false);
@@ -311,6 +317,31 @@ void MainWindow::OnClose(wxCloseEvent& /*unused*/)
 }
 
 void MainWindow::OnUnitSyncReloadRequest(wxCommandEvent& /*unused*/)
+{
+	PerformUnitsyncReload();
+}
+
+void MainWindow::OnUnitSyncReloadRequestPostDownload(wxCommandEvent& /*unused*/)
+{
+	static constexpr int kDelayMs = 1000;
+
+	m_unitsync_reload_postdownload_pending = true;
+	if (m_unitsync_reload_timer.IsRunning()) {
+		m_unitsync_reload_timer.Stop();
+	}
+	m_unitsync_reload_timer.StartOnce(kDelayMs);
+}
+
+void MainWindow::OnUnitsyncReloadTimer(wxTimerEvent& /*event*/)
+{
+	if (!m_unitsync_reload_postdownload_pending) {
+		return;
+	}
+	m_unitsync_reload_postdownload_pending = false;
+	PerformUnitsyncReload();
+}
+
+void MainWindow::PerformUnitsyncReload()
 {
 	// Ensure unitsync reload happens on the GUI thread (worker-thread reload has caused crashes
 	// with some engine bundles).
