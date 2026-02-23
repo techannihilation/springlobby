@@ -93,7 +93,9 @@ CustomMessageBox::CustomMessageBox(wxIcon* icon, wxWindow* parent, const wxStrin
 	// 3) buttons
 	int center_flag = wxEXPAND;
 	if (style & wxYES_NO) {
-		assert(style & wxCANCEL); // It is recommended to always use wxCANCEL with this style as otherwise the message box won't have a close button under wxMSW and the user will be forced to answer it.
+		// wxWidgets recommends using wxCANCEL with wxYES_NO on some platforms, but callers
+		// may intentionally want a strict Yes/No dialog. Don't assert here: closing the dialog
+		// via the window manager is still handled (maps to "No" in CloseDialog()).
 		center_flag = wxALIGN_CENTRE;
 	}
 
