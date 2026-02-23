@@ -50,7 +50,7 @@ if(CMAKE_CROSSCOMPILING)
 else()
 	set(WXSTATIC "")
 endif()
-find_program(wxWidgets_CONFIG_EXECUTABLE NAMES wx-config-3.0 wx-config ONLY_CMAKE_FIND_ROOT_PATH)
+find_program(wxWidgets_CONFIG_EXECUTABLE NAMES wx-config-3.2 wx-config ONLY_CMAKE_FIND_ROOT_PATH)
 if(wxWidgets_CONFIG_EXECUTABLE-NOTFOUND)
 	message(FATAL_ERROR "couldn't find wx-config!")
 else()
@@ -61,11 +61,12 @@ execute_process(COMMAND ${wxWidgets_CONFIG_EXECUTABLE} "--version-full"
 	OUTPUT_VARIABLE WX_VERSION
 	OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-set(WX_VERSION_MIN "3.0")
+set(WX_VERSION_MIN "3.2.9")
+string(REGEX REPLACE "^([0-9]+\\.[0-9]+).*" "\\1" WX_VERSION_MIN_SERIES "${WX_VERSION_MIN}")
 if("${WX_VERSION}" VERSION_LESS "${WX_VERSION_MIN}")
 	set(WX_VERSION_DEFAULT "${WX_VERSION}")
 	# Append version selector to find the right one in a multi-slot install if the default is lower than required.
-	set(wxWidgets_CONFIG_EXECUTABLE ${wxWidgets_CONFIG_EXECUTABLE} "--version=${WX_VERSION_MIN}")
+	set(wxWidgets_CONFIG_EXECUTABLE ${wxWidgets_CONFIG_EXECUTABLE} "--version=${WX_VERSION_MIN_SERIES}")
 	execute_process(COMMAND ${wxWidgets_CONFIG_EXECUTABLE} "--version-full"
 		OUTPUT_VARIABLE WX_VERSION
 		OUTPUT_STRIP_TRAILING_WHITESPACE)
