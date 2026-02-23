@@ -16,6 +16,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cctype>
+#include <ctime>
+#include <filesystem>
+#include <system_error>
 #include <vector>
 
 #ifdef _WIN32
@@ -33,6 +36,91 @@
 std::string SlPaths::m_user_defined_config_path = "";
 
 #ifndef TESTS
+
+namespace {
+
+static bool DirExists(const std::filesystem::path& p)
+{
+	std::error_code ec;
+	return std::filesystem::is_directory(p, ec);
+}
+
+static bool DirNonEmpty(const std::filesystem::path& p)
+{
+	std::error_code ec;
+	for (auto it = std::filesystem::directory_iterator(p, ec);
+	     !ec && it != std::filesystem::directory_iterator();
+	     ++it) {
+		return true;
+	}
+	return false;
+}
+
+static std::string MakeTimestamp()
+{
+	std::time_t t = std::time(nullptr);
+	std::tm tmv;
+#if defined(_WIN32)
+	localtime_s(&tmv, &t);
+#else
+	localtime_r(&t, &tmv);
+#endif
+
+	char buf[32];
+	if (std::strftime(buf, sizeof(buf), "%Y%m%d-%H%M%S", &tmv) == 0) {
+		return "unknown-time";
+	}
+	return buf;
+}
+
+static void MaybeQuarantineSpringWriteDirCache(const std::string& writeDir)
+{
+	if (writeDir.empty()) {
+		return;
+	}
+
+	const std::filesystem::path base(writeDir);
+	const std::filesystem::path cacheDir = base / "cache";
+	if (!DirExists(cacheDir) || !DirNonEmpty(cacheDir)) {
+		return;
+	}
+
+	const bool hasRapidDir = DirExists(base / "rapid");
+	const bool hasPoolDir = DirExists(base / "pool");
+	const bool hasPackagesDir = DirExists(base / "packages");
+	if (hasRapidDir || hasPoolDir || hasPackagesDir) {
+		return;
+	}
+
+	// Some unitsync builds can crash in Init() when the Spring write-dir cache exists but
+	// rapid/pool/packages are missing. Quarantine the cache to allow startup without requiring
+	// manual deletion.
+	std::error_code ec;
+	const std::string stamp = MakeTimestamp();
+	std::filesystem::path target = base / ("cache.orphaned-" + stamp);
+	for (int attempt = 0; attempt < 100 && DirExists(target); ++attempt) {
+		target = base / ("cache.orphaned-" + stamp + "-" + std::to_string(attempt + 1));
+	}
+
+	std::filesystem::rename(cacheDir, target, ec);
+	if (ec) {
+		wxLogWarning("Failed to quarantine Spring write-dir cache '%s': %s. Attempting to delete it to avoid unitsync crash.",
+			     cacheDir.string().c_str(), ec.message().c_str());
+		ec.clear();
+		std::filesystem::remove_all(cacheDir, ec);
+		if (ec) {
+			wxLogWarning("Failed to delete Spring write-dir cache '%s': %s",
+				     cacheDir.string().c_str(), ec.message().c_str());
+		}
+		return;
+	}
+
+	wxLogWarning("Quarantined Spring write-dir cache '%s' -> '%s' (rapid/pool/packages missing) to avoid unitsync crash.",
+		     cacheDir.string().c_str(), target.string().c_str());
+}
+
+} // namespace
+
 // returns my documents dir on windows, HOME on windows
 static std::string GetMyDocumentsDir()
 {
@@ -250,6 +338,7 @@ void SlPaths::SetUsedSpringIndex(const std::string& index)
 
 void SlPaths::ReconfigureUnitsync()
 {
+	MaybeQuarantineSpringWriteDirCache(SlPaths::GetDownloadDir());
 	LSL::Util::config().ConfigurePaths(
 	    SlPaths::GetCachePath(),
 	    SlPaths::GetUnitSync(),
